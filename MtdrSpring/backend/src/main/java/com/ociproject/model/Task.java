@@ -3,12 +3,13 @@ package com.ociproject.model;
 import com.ociproject.converter.YnBooleanConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "TASKS")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor 
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @Builder
 public class Task {
 
@@ -71,6 +72,17 @@ public class Task {
 
     @Column(name = "DELETED_AT")
     private LocalDateTime deletedAt;
+
+    @Column(name = "ESTIMATED_HOURS", precision = 4, scale = 2)
+    private BigDecimal estimatedHours;
+
+    @Convert(converter = YnBooleanConverter.class)
+    @Column(name = "IS_SUBTASK", length = 1)
+    private Boolean subtask = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "PARENT_TASK_ID")
+    private Task parentTask;
 
     @PrePersist
     protected void onCreate() {

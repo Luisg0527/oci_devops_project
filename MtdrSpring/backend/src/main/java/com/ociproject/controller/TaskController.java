@@ -197,6 +197,14 @@ public class TaskController {
                     .orElseThrow(() -> new ResourceNotFoundException("Assignee user not found."));
         }
 
+        Task parentTask = null;
+        if (request.getParentTaskId() != null) {
+            parentTask = taskService.findById(request.getParentTaskId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent task not found."));
+        }
+
+        boolean isSubtask = Boolean.TRUE.equals(request.getIsSubtask()) || parentTask != null;
+
         Task task = Task.builder()
                 .project(project)
                 .sprint(sprint)
@@ -214,6 +222,9 @@ public class TaskController {
                 .createdBy(creator)
                 .assignedTo(assignee)
                 .dueDate(request.getDueDate())
+                .estimatedHours(request.getEstimatedHours())
+                .subtask(isSubtask)
+                .parentTask(parentTask)
                 .deleted(false)
                 .build();
         task = taskService.save(task);
@@ -235,6 +246,13 @@ public class TaskController {
         if (request.getPriority() != null) task.setPriority(Task.Priority.valueOf(request.getPriority()));
         if (request.getDueDate() != null) task.setDueDate(request.getDueDate());
         if (request.getTaskStage() != null) task.setTaskStage(Task.Stage.valueOf(request.getTaskStage()));
+        if (request.getEstimatedHours() != null) task.setEstimatedHours(request.getEstimatedHours());
+        if (request.getParentTaskId() != null) {
+            Task parentTask = taskService.findById(request.getParentTaskId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent task not found."));
+            task.setParentTask(parentTask);
+            task.setSubtask(true);
+        }
 
         if (request.getAssignedTo() != null) {
             User assignee = userService.findById(request.getAssignedTo())
@@ -305,6 +323,16 @@ public class TaskController {
                         .build())
                 .collect(Collectors.toList());
         return ResponseEntity.ok(Map.of("task_id", taskId, "history", history));
+    }
+
+    @GetMapping("/{taskId}/subtasks")
+    public ResponseEntity<?> getSubtasks(@PathVariable Long taskId) {
+        taskService.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found."));
+        List<TaskResponse> subtasks = taskService.findSubtasks(taskId).stream()
+                .map(TaskResponse::from)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(Map.of("task_id", taskId, "subtasks", subtasks));
     }
 
     @GetMapping("/{taskId}/sprint-history")

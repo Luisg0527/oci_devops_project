@@ -33,7 +33,10 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-.anyRequest().authenticated()
+                .requestMatchers("/", "/index.html", "/static/**",
+                                 "/*.js", "/*.css", "/*.json", "/*.ico", "/*.png",
+                                 "/manifest.json", "/asset-manifest.json").permitAll()
+                .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

@@ -3,6 +3,7 @@ package com.ociproject.model;
 import com.ociproject.converter.YnBooleanConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -41,6 +42,10 @@ public class Sprint {
 
     @Column(name = "DELETED_AT")
     private LocalDateTime deletedAt;
+
+    /** Maintained automatically by DB trigger TRG_TASK_HOURS_ROLLUP. */
+    @Column(name = "TOTAL_HOURS", precision = 8, scale = 2, insertable = false, updatable = false)
+    private BigDecimal totalHours;
 
     @PrePersist
     protected void onCreate() {

@@ -55,6 +55,10 @@ public class TaskService {
         return sprintHistoryRepository.findByTaskTaskIdOrderByChangedAtAsc(taskId);
     }
 
+    public List<Task> findSubtasks(Long parentTaskId) {
+        return taskRepository.findByParentTaskTaskIdAndDeletedFalse(parentTaskId);
+    }
+
     @Transactional
     public Task save(Task task) {
         return taskRepository.save(task);
@@ -93,6 +97,36 @@ public class TaskService {
 
         task.setSprint(sprint);
         task.setTaskStage(Task.Stage.SPRINT);
+        return taskRepository.save(task);
+    }
+
+    /**
+     * Bot workflow: assign task to sprint, set assignee, and move status to IN_PROGRESS
+     * in a single transaction, logging both sprint and status history.
+     */
+    @Transactional
+    public Task startTask(Long taskId, Sprint sprint, User assignee) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+
+        sprintHistoryRepository.save(TaskSprintHistory.builder()
+                .task(task)
+                .oldSprint(task.getSprint())
+                .newSprint(sprint)
+                .changedBy(assignee)
+                .build());
+
+        statusHistoryRepository.save(TaskStatusHistory.builder()
+                .task(task)
+                .oldStatus(task.getStatus() != null ? task.getStatus().name() : null)
+                .newStatus(Task.Status.IN_PROGRESS.name())
+                .changedBy(assignee)
+                .build());
+
+        task.setSprint(sprint);
+        task.setTaskStage(Task.Stage.SPRINT);
+        task.setAssignedTo(assignee);
+        task.setStatus(Task.Status.IN_PROGRESS);
         return taskRepository.save(task);
     }
 

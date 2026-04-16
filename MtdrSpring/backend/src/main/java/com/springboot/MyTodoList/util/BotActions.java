@@ -1,8 +1,10 @@
 package com.springboot.MyTodoList.util;
 
+import com.ociproject.model.Project;
 import com.ociproject.model.Sprint;
 import com.ociproject.model.Task;
 import com.ociproject.model.User;
+import com.ociproject.service.ProjectService;
 import com.ociproject.service.SprintService;
 import com.ociproject.service.TaskService;
 import com.ociproject.service.UserService;
@@ -12,9 +14,12 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class BotActions {
@@ -29,12 +34,16 @@ public class BotActions {
     private final TaskService taskService;
     private final UserService userService;
     private final SprintService sprintService;
+    private final ProjectService projectService;
 
-    public BotActions(TelegramClient tc, TaskService ts, UserService us, SprintService ss) {
+    private static final Pattern PARENT_PATTERN = Pattern.compile("(?i)\\s+parent:(\\d+)$");
+
+    public BotActions(TelegramClient tc, TaskService ts, UserService us, SprintService ss, ProjectService ps) {
         telegramClient = tc;
         taskService = ts;
         userService = us;
         sprintService = ss;
+        projectService = ps;
         exit = false;
     }
 
@@ -74,15 +83,28 @@ public class BotActions {
         exit = true;
     }
 
-    // ── /addtask <title>  ────────────────────────────────────────────────────────
+    // ── /addtask <projectId> <estimatedHours> <title> [parent:<parentTaskId>]  ──
     public void fnAddTask() {
         if (!requestText.startsWith(BotCommands.ADD_TASK.getCommand()) || exit)
             return;
 
-        String title = requestText.substring(BotCommands.ADD_TASK.getCommand().length()).trim();
-        if (title.isEmpty()) {
+        String args = requestText.substring(BotCommands.ADD_TASK.getCommand().length()).trim();
+
+        // Extract optional parent:<parentTaskId> suffix
+        Long parentTaskId = null;
+        Matcher parentMatcher = PARENT_PATTERN.matcher(args);
+        if (parentMatcher.find()) {
+            parentTaskId = Long.parseLong(parentMatcher.group(1));
+            args = args.substring(0, parentMatcher.start()).trim();
+        }
+
+        // Expect: <projectId> <estimatedHours> <title>
+        String[] parts = args.split("\\s+", 3);
+        if (parts.length < 3) {
             BotHelper.sendMessageToTelegram(chatId,
-                    "Usage: /addtask <title>\n" + BotMessages.INVALID_FORMAT.getMessage(), telegramClient);
+                    "Usage: /addtask <projectId> <estimatedHours> <title> [parent:<parentTaskId>]\n"
+                            + BotMessages.INVALID_FORMAT.getMessage(),
+                    telegramClient);
             exit = true;
             return;
         }
@@ -95,17 +117,79 @@ public class BotActions {
         }
 
         try {
+            long projectId = Long.parseLong(parts[0]);
+            BigDecimal estimatedHours = new BigDecimal(parts[1]);
+            String title = parts[2];
+
+            // Validate hours range
+            if (estimatedHours.compareTo(BigDecimal.ZERO) <= 0
+                    || estimatedHours.compareTo(new BigDecimal("4")) > 0) {
+                if (estimatedHours.compareTo(new BigDecimal("4")) > 0) {
+                    BotHelper.sendMessageToTelegram(chatId,
+                            BotMessages.TASK_HOURS_EXCEEDED.getMessage(), telegramClient);
+                } else {
+                    BotHelper.sendMessageToTelegram(chatId,
+                            "Estimated hours must be greater than 0 and at most 4.\n"
+                                    + BotMessages.INVALID_FORMAT.getMessage(),
+                            telegramClient);
+                }
+                exit = true;
+                return;
+            }
+
+            Optional<Project> projectOpt = projectService.findById(projectId);
+            if (projectOpt.isEmpty()) {
+                BotHelper.sendMessageToTelegram(chatId, BotMessages.PROJECT_NOT_FOUND.getMessage(), telegramClient);
+                exit = true;
+                return;
+            }
+
+            // Resolve parent task if provided
+            Task parentTask = null;
+            if (parentTaskId != null) {
+                Optional<Task> parentOpt = taskService.findById(parentTaskId);
+                if (parentOpt.isEmpty()) {
+                    BotHelper.sendMessageToTelegram(chatId,
+                            String.format(BotMessages.PARENT_TASK_NOT_FOUND.getMessage(), parentTaskId),
+                            telegramClient);
+                    exit = true;
+                    return;
+                }
+                parentTask = parentOpt.get();
+            }
+
             User user = userOpt.get();
+            boolean isSubtask = parentTask != null;
+
             Task task = Task.builder()
+                    .project(projectOpt.get())
                     .title(title)
                     .status(Task.Status.PENDING)
                     .taskStage(Task.Stage.BACKLOG)
+                    .estimatedHours(estimatedHours)
+                    .subtask(isSubtask)
+                    .parentTask(parentTask)
                     .createdBy(user)
                     .assignedTo(user)
+                    .deleted(false)
                     .build();
             Task saved = taskService.save(task);
+
+            if (isSubtask) {
+                BotHelper.sendMessageToTelegram(chatId,
+                        String.format(BotMessages.TASK_SUBTASK_CREATED.getMessage(),
+                                saved.getTaskId(), saved.getTitle(),
+                                saved.getEstimatedHours(), parentTask.getTaskId()),
+                        telegramClient);
+            } else {
+                BotHelper.sendMessageToTelegram(chatId,
+                        String.format(BotMessages.TASK_CREATED.getMessage(),
+                                saved.getTaskId(), saved.getTitle(), saved.getEstimatedHours()),
+                        telegramClient);
+            }
+        } catch (NumberFormatException e) {
             BotHelper.sendMessageToTelegram(chatId,
-                    String.format(BotMessages.TASK_CREATED.getMessage(), saved.getTaskId(), saved.getTitle()),
+                    "projectId and estimatedHours must be numbers.\n" + BotMessages.INVALID_FORMAT.getMessage(),
                     telegramClient);
         } catch (Exception e) {
             logger.error(e.getLocalizedMessage(), e);
@@ -147,7 +231,8 @@ public class BotActions {
                 return;
             }
 
-            taskService.assignToSprint(taskId, sprintOpt.get(), userOpt.get());
+            // Atomically: set sprint + TASK_STAGE=SPRINT + ASSIGNED_TO=currentUser + STATUS=IN_PROGRESS
+            taskService.startTask(taskId, sprintOpt.get(), userOpt.get());
             BotHelper.sendMessageToTelegram(chatId,
                     String.format(BotMessages.TASK_ASSIGNED_TO_SPRINT.getMessage(), taskId, sprintId),
                     telegramClient);
@@ -182,7 +267,44 @@ public class BotActions {
 
         try {
             long taskId = Long.parseLong(arg);
-            taskService.updateStatus(taskId, Task.Status.DONE, userOpt.get());
+            User currentUser = userOpt.get();
+
+            Optional<Task> taskOpt = taskService.findById(taskId);
+            if (taskOpt.isEmpty()) {
+                BotHelper.sendMessageToTelegram(chatId, BotMessages.TASK_NOT_FOUND.getMessage(), telegramClient);
+                exit = true;
+                return;
+            }
+            Task task = taskOpt.get();
+
+            // Ownership check: only the assigned developer may complete the task
+            if (task.getAssignedTo() != null
+                    && !task.getAssignedTo().getUserId().equals(currentUser.getUserId())) {
+                BotHelper.sendMessageToTelegram(chatId,
+                        String.format(BotMessages.TASK_NOT_YOURS.getMessage(), taskId),
+                        telegramClient);
+                exit = true;
+                return;
+            }
+
+            // Pending-subtasks guard: parent tasks must have all subtasks closed first
+            if (!Boolean.TRUE.equals(task.getSubtask())) {
+                long pendingSubtasks = taskService.findSubtasks(taskId).stream()
+                        .filter(s -> s.getStatus() != Task.Status.DONE
+                                && s.getStatus() != Task.Status.CANCELLED)
+                        .count();
+                if (pendingSubtasks > 0) {
+                    BotHelper.sendMessageToTelegram(chatId,
+                            String.format(BotMessages.TASK_HAS_PENDING_SUBTASKS.getMessage(),
+                                    taskId, pendingSubtasks),
+                            telegramClient);
+                    exit = true;
+                    return;
+                }
+            }
+
+            // Sets STATUS=DONE and TASK_STAGE=COMPLETED
+            taskService.updateStatus(taskId, Task.Status.DONE, currentUser);
             BotHelper.sendMessageToTelegram(chatId,
                     String.format(BotMessages.TASK_COMPLETED.getMessage(), taskId),
                     telegramClient);

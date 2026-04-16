@@ -4,6 +4,7 @@ import com.ociproject.model.Task;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +30,10 @@ public class TaskResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Boolean isDeleted;
+    private BigDecimal estimatedHours;
+    private Boolean isSubtask;
+    private Long parentTaskId;
+    private String parentTaskTitle;
     private List<StatusHistoryEntry> statusHistory;
     private List<SprintHistoryEntry> sprintHistory;
 
@@ -76,6 +81,10 @@ public class TaskResponse {
                 .createdAt(task.getCreatedAt())
                 .updatedAt(task.getUpdatedAt())
                 .isDeleted(task.getDeleted())
+                .estimatedHours(task.getEstimatedHours())
+                .isSubtask(task.getSubtask())
+                .parentTaskId(task.getParentTask() != null ? task.getParentTask().getTaskId() : null)
+                .parentTaskTitle(task.getParentTask() != null ? task.getParentTask().getTitle() : null)
                 .build();
     }
 }

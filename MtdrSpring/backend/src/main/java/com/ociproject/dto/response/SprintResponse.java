@@ -4,6 +4,7 @@ import com.ociproject.model.Sprint;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -28,6 +29,7 @@ public class SprintResponse {
     private Integer inProgressTasks;
     private Integer pendingTasks;
     private Boolean onTrack;
+    private BigDecimal totalHours;
     private LocalDateTime createdAt;
 
     public static SprintResponse from(Sprint sprint) {
@@ -44,6 +46,7 @@ public class SprintResponse {
                 .status(sprint.getStatus() != null ? sprint.getStatus().name() : null)
                 .isActive(active)
                 .daysLeft(daysLeft)
+                .totalHours(sprint.getTotalHours())
                 .createdAt(sprint.getCreatedAt())
                 .build();
     }

@@ -4,6 +4,7 @@ import com.ociproject.model.Project;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -18,6 +19,7 @@ public class ProjectResponse {
     private Long activeSprintId;
     private String activeSprintName;
     private Integer memberCount;
+    private BigDecimal totalHours;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -33,6 +35,7 @@ public class ProjectResponse {
                 .activeSprintId(activeSprintId)
                 .activeSprintName(activeSprintName)
                 .memberCount(memberCount)
+                .totalHours(project.getTotalHours())
                 .createdAt(project.getCreatedAt())
                 .updatedAt(project.getUpdatedAt())
                 .build();

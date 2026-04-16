@@ -1,6 +1,7 @@
 package com.springboot.MyTodoList.util;
 
 import com.ociproject.config.BotProps;
+import com.ociproject.service.ProjectService;
 import com.ociproject.service.SprintService;
 import com.ociproject.service.TaskService;
 import com.ociproject.service.UserService;
@@ -26,6 +27,7 @@ public class TelegramBotHandler implements SpringLongPollingBot {
     private final TaskService taskService;
     private final UserService userService;
     private final SprintService sprintService;
+    private final ProjectService projectService;
 
     @Override
     public String getBotToken() {
@@ -46,7 +48,7 @@ public class TelegramBotHandler implements SpringLongPollingBot {
 
             logger.debug("Telegram update — chatId={} text={}", chatId, text);
 
-            BotActions actions = new BotActions(telegramClient, taskService, userService, sprintService);
+            BotActions actions = new BotActions(telegramClient, taskService, userService, sprintService, projectService);
             actions.setChatId(chatId);
             actions.setRequestText(text);
 
