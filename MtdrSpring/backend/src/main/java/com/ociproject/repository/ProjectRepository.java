@@ -1,0 +1,11 @@
+package com.ociproject.repository;
+
+import com.ociproject.model.Project;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface ProjectRepository extends JpaRepository<Project, Long> {
+    List<Project> findAllByDeletedFalse();
+    List<Project> findByStatusAndDeletedFalse(Project.Status status);
+    List<Project> findByManagerUserIdAndDeletedFalse(Long managerId);
+}

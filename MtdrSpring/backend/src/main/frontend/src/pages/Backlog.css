@@ -1,0 +1,306 @@
+.backlog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.backlog-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.backlog-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.backlog-select {
+  padding: 8px 32px 8px 12px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%236a7171' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 10px center;
+  background-size: 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--font-family);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.backlog-select:focus {
+  border-color: var(--color-primary);
+}
+
+/* Prioridad: badge visible + select transparente encima */
+.backlog-priority-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.backlog-priority-cell:focus-within {
+  box-shadow: 0 0 0 2px var(--color-primary);
+  border-radius: var(--border-radius-sm);
+}
+
+.backlog-priority-chevron {
+  font-size: 18px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.backlog-priority-select-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.25;
+  z-index: 1;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Estado: badge visible + select transparente encima */
+.backlog-status-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.backlog-status-cell:focus-within {
+  box-shadow: 0 0 0 2px var(--color-primary);
+  border-radius: var(--border-radius-sm);
+}
+
+.backlog-status-chevron {
+  font-size: 18px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.backlog-status-select-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  /* El menú nativo suele heredar este tamaño; 16px lo inflaba mucho */
+  font-size: 14px;
+  line-height: 1.25;
+  z-index: 1;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* New Task Form */
+.backlog-new-task {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.backlog-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 14px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-family);
+  font-size: 14px;
+  outline: none;
+}
+
+.backlog-input--sm {
+  min-width: 120px;
+  flex: 0.5;
+}
+
+.backlog-input:focus {
+  border-color: var(--color-primary);
+}
+
+.backlog-form-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-red);
+  margin-top: 4px;
+}
+
+/* Sortable headers */
+.backlog-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.backlog-th-sortable:hover {
+  color: var(--color-text-primary);
+}
+
+.backlog-sort-icon {
+  font-size: 14px;
+  vertical-align: middle;
+  margin-left: 2px;
+  opacity: 0.5;
+}
+
+.backlog-th-sortable:hover .backlog-sort-icon {
+  opacity: 1;
+}
+
+/* Table overrides */
+.backlog-task-name {
+  font-weight: 600;
+}
+
+.backlog-assignee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.backlog-assignee__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.backlog-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+}
+
+.backlog-action-btn:hover {
+  background: var(--color-bg-input);
+}
+
+/* Pagination */
+.backlog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--color-bg-input);
+  border-top: 1px solid var(--color-border);
+}
+
+.backlog-pagination__btns {
+  display: flex;
+  gap: 4px;
+}
+
+.backlog-page-btn {
+  min-width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  background: transparent;
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.backlog-page-btn:hover:not(:disabled) {
+  background: var(--color-bg-card);
+}
+
+.backlog-page-btn--active {
+  background: var(--color-primary);
+  color: var(--color-text-white);
+}
+
+.backlog-page-btn--active:hover {
+  background: var(--color-primary);
+}
+
+.backlog-page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Insights */
+.backlog-insights {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 20px;
+}
+
+.backlog-insight__value {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.backlog-insight__number {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.backlog-insight__row {
+  display: flex;
+  gap: 32px;
+  margin-top: 12px;
+}
+
+.backlog-insight__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

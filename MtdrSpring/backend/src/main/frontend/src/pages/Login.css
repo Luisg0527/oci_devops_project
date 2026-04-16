@@ -1,0 +1,139 @@
+.login-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #f2f2f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: var(--font-family);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-card__brand {
+  margin: 0 0 18px;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #2f3335;
+  letter-spacing: 0.4px;
+}
+
+.login-card__content {
+  background: #ffffff;
+  border-top: 3px solid #a14839;
+  padding: 36px 32px 28px;
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.login-card__title {
+  margin: 0;
+  font-size: 38px;
+  line-height: 1.1;
+  color: #1f2324;
+}
+
+.login-card__subtitle {
+  margin: 10px 0 28px;
+  color: #606869;
+  font-size: 17px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-form__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #434a4b;
+  letter-spacing: 0.8px;
+}
+
+.login-form__input {
+  width: 100%;
+  border: 1px solid #ececec;
+  background: #f3f3f3;
+  border-radius: 2px;
+  font-size: 15px;
+  color: #1a1c1c;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.login-form__input:focus {
+  outline: none;
+  border-color: #3c4545;
+}
+
+.login-form__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 6px;
+}
+
+.login-form__link {
+  border: none;
+  background: transparent;
+  color: #a14839;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.login-form__remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 14px;
+  color: #5a5f60;
+}
+
+.login-form__submit {
+  margin-top: 6px;
+  border: none;
+  border-radius: 2px;
+  background: #2c3a3d;
+  color: #ffffff;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+
+.login-form__submit:hover {
+  background: #223033;
+}
+
+.login-form__submit:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.login-form__feedback {
+  margin: 0;
+  font-size: 13px;
+}
+
+.login-form__feedback--error {
+  color: #b23a2c;
+}
+
+.login-form__feedback--ok {
+  color: #4a6a51;
+}

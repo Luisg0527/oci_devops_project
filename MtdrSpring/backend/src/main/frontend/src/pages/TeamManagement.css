@@ -1,0 +1,77 @@
+.team-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.team-invite {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Stats row */
+.team-stats {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 20px;
+}
+
+.team-ai-tip {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.team-ai-icon {
+  font-size: 32px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.team-ai-tip__title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.team-ai-tip__text {
+  font-size: 14px;
+  margin: 0;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+.team-health__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.team-health__value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.team-health__number {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.team-health__label {
+  font-size: 20px;
+  color: var(--color-text-secondary);
+}
+
+/* Team grid */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}

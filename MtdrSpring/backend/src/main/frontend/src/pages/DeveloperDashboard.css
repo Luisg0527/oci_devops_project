@@ -1,0 +1,103 @@
+.dev-welcome {
+  margin-bottom: 8px;
+}
+
+.dev-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.dev-grid__left {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Timer */
+.dev-timer__header {
+  margin-bottom: 8px;
+}
+
+.dev-timer__title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 4px 0 0;
+}
+
+.dev-timer__display {
+  display: flex;
+  align-items: baseline;
+  margin: 16px 0;
+}
+
+.dev-timer__digits {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-timer__seconds {
+  font-size: 20px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-timer__task {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dev-timer__task-name {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 14px;
+  background: var(--color-bg-input);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  flex: 1;
+}
+
+.dev-timer__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Sprint */
+.dev-sprint__velocity {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 4px 0 12px;
+}
+
+.dev-sprint__days {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: var(--color-gold);
+  color: var(--color-primary);
+}
+
+/* Tasks */
+.dev-tasks {
+  overflow: hidden;
+}
+
+/* Feed */
+.dev-feed {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.dev-feed .activity-item {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: 14px;
+  flex-direction: column;
+}

@@ -5,7 +5,7 @@ import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import com.springboot.MyTodoList.config.BotProps;
+import com.ociproject.config.BotProps;
 
 
 @Configuration

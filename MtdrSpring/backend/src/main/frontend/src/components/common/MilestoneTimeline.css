@@ -1,0 +1,80 @@
+.milestone-timeline {
+  position: relative;
+  padding: 16px 0;
+}
+
+.milestone-timeline__line {
+  position: absolute;
+  top: 30px;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background: var(--color-divider);
+}
+
+.milestone-timeline__items {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+}
+
+.milestone-timeline__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.milestone-timeline__dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.milestone-timeline__item--done .milestone-timeline__dot {
+  background: var(--color-primary);
+  color: var(--color-text-white);
+}
+
+.milestone-timeline__item--done .milestone-timeline__dot .material-icons {
+  font-size: 16px;
+}
+
+.milestone-timeline__item--current .milestone-timeline__dot {
+  background: var(--color-bg-card);
+  border: 2px solid var(--color-primary);
+}
+
+.milestone-timeline__ring {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.milestone-timeline__item--upcoming .milestone-timeline__dot {
+  background: var(--color-bg-page);
+  border: 2px solid var(--color-divider);
+}
+
+.milestone-timeline__name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.milestone-timeline__date {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.milestone-timeline__item--upcoming .milestone-timeline__name,
+.milestone-timeline__item--upcoming .milestone-timeline__date {
+  color: var(--color-text-muted);
+}

@@ -26,7 +26,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: http
+      targetPort: 8080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -49,11 +49,9 @@ spec:
           imagePullPolicy: Always
           env:
             - name: db_user
-              value: "TODOUSER"
+              value: "EQUIPO65"
             - name: db_url
               value: "jdbc:oracle:thin:@%TODO_PDB_NAME%_tp?TNS_ADMIN=/mtdrworkshop/creds"
-            - name: todo.table.name
-              value: "todoitem"
             - name: driver_class_name
               value: "oracle.jdbc.OracleDriver"
             - name: OCI_REGION
