@@ -58,3 +58,5 @@ if [ -z "$1" ]; then
 else
     kubectl apply -f <(istioctl kube-inject -f $SCRIPT_DIR/todolistapp-springboot-$CURRENTTIME.yaml) -n mtdrworkshop
 fi
+kubectl rollout restart deployment/todolistapp-springboot-deployment -n mtdrworkshop
+kubectl rollout status deployment/todolistapp-springboot-deployment -n mtdrworkshop --timeout=120s
