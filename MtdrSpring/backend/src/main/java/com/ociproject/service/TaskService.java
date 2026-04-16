@@ -131,6 +131,24 @@ public class TaskService {
     }
 
     @Transactional
+    public Task completeTask(Long taskId, java.math.BigDecimal actualHours, User changedBy) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+
+        statusHistoryRepository.save(TaskStatusHistory.builder()
+                .task(task)
+                .oldStatus(task.getStatus() != null ? task.getStatus().name() : null)
+                .newStatus(Task.Status.DONE.name())
+                .changedBy(changedBy)
+                .build());
+
+        task.setStatus(Task.Status.DONE);
+        task.setTaskStage(Task.Stage.COMPLETED);
+        task.setActualHours(actualHours);
+        return taskRepository.save(task);
+    }
+
+    @Transactional
     public void softDelete(Long id) {
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Task not found: " + id));
