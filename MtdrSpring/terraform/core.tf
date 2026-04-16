@@ -354,6 +354,19 @@ resource "oci_core_security_list" "nodePool" {
       min = "22"
     }
   }
+  ingress_security_rules {
+    #required
+    source              = "10.0.20.0/24"
+    protocol            = "6" #TCP
+    #optional
+    source_type         = "CIDR_BLOCK"
+    stateless           = "false"
+    description         = "Allow Load Balancer to reach NodePort services on worker nodes"
+    tcp_options {
+      min = "30000"
+      max = "32767"
+    }
+  }
 }
 # resource "oci_core_subnet" "svclb_Subnet" {
 #   #Required
