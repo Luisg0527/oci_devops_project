@@ -31,9 +31,11 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
+                .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html",
-                                 "/v3/api-docs/**", "/webjars/**").permitAll()
+                                 "/v3/api-docs/**", "/webjars/**",
+                                 "/api/v1/swagger-ui/**", "/api/v1/swagger-ui.html",
+                                 "/api/v1/v3/api-docs/**").permitAll()
                 .requestMatchers("/", "/index.html", "/static/**",
                                  "/*.js", "/*.css", "/*.json", "/*.ico", "/*.png",
                                  "/manifest.json", "/asset-manifest.json").permitAll()
