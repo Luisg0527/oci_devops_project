@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import './Login.css';
 
+const API_BASE = '/api/v1';
+
 function Login() {
   const [credentials, setCredentials] = useState({
     username: '',
@@ -21,7 +23,7 @@ function Login() {
     setMessage('Recuperacion de contrasena pendiente de integracion con backend.');
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const missing = [];
@@ -36,11 +38,37 @@ function Login() {
     setError('');
     setIsSubmitting(true);
 
-    // Placeholder until backend authentication is connected.
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: credentials.username.trim(),
+          password: credentials.password,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible iniciar sesion.');
+      }
+
+      if (!payload.token) {
+        throw new Error('El backend no regreso token de acceso.');
+      }
+
+      localStorage.setItem('authToken', payload.token);
+      if (payload.refreshToken) localStorage.setItem('refreshToken', payload.refreshToken);
+      if (payload.userId != null) localStorage.setItem('userId', String(payload.userId));
+      if (payload.role) localStorage.setItem('userRole', payload.role);
+
+      setMessage('Inicio de sesion correcto. Redirigiendo...');
+      window.location.assign('/dashboard');
+    } catch (err) {
+      setError(err.message || 'No fue posible iniciar sesion.');
+    } finally {
       setIsSubmitting(false);
-      setMessage('Formulario valido. Login pendiente de integracion con API.');
-    }, 500);
+    }
   };
 
   return (
