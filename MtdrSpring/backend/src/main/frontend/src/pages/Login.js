@@ -63,7 +63,7 @@ function Login() {
       if (payload.role) localStorage.setItem('userRole', payload.role);
 
       setMessage('Inicio de sesión correcto. Redirigiendo...');
-      window.location.assign('/dashboard');
+      window.location.assign('/projects');
     } catch (err) {
       setError(err.message || 'No fue posible iniciar sesión.');
     } finally {
