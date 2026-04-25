@@ -59,6 +59,7 @@ function Login() {
       localStorage.setItem('authToken', payload.token);
       if (payload.refreshToken) localStorage.setItem('refreshToken', payload.refreshToken);
       if (payload.userId != null) localStorage.setItem('userId', String(payload.userId));
+      if (payload.fullName) localStorage.setItem('userFullName', payload.fullName);
       if (payload.role) localStorage.setItem('userRole', payload.role);
 
       setMessage('Inicio de sesión correcto. Redirigiendo...');
