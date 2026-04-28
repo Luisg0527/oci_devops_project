@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import './Login.css';
 
+const API_BASE = '/api/v1';
+
 function Login() {
   const [credentials, setCredentials] = useState({
     username: '',
     password: '',
-    rememberMe: false,
   });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -18,15 +19,15 @@ function Login() {
   };
 
   const handleForgotPassword = () => {
-    setMessage('Recuperacion de contrasena pendiente de integracion con backend.');
+    setMessage('Recuperación de contraseña pendiente de integración con el backend.');
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const missing = [];
-    if (!credentials.username.trim()) missing.push('correo');
-    if (!credentials.password.trim()) missing.push('contrasena');
+    if (!credentials.username.trim()) missing.push('nombre de usuario');
+    if (!credentials.password.trim()) missing.push('contraseña');
 
     if (missing.length > 0) {
       setError(`Completa: ${missing.join(' y ')}.`);
@@ -36,11 +37,38 @@ function Login() {
     setError('');
     setIsSubmitting(true);
 
-    // Placeholder until backend authentication is connected.
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: credentials.username.trim(),
+          password: credentials.password,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible iniciar sesión.');
+      }
+
+      if (!payload.token) {
+        throw new Error('El backend no devolvió token de acceso.');
+      }
+
+      localStorage.setItem('authToken', payload.token);
+      if (payload.refreshToken) localStorage.setItem('refreshToken', payload.refreshToken);
+      if (payload.userId != null) localStorage.setItem('userId', String(payload.userId));
+      if (payload.fullName) localStorage.setItem('userFullName', payload.fullName);
+      if (payload.role) localStorage.setItem('userRole', payload.role);
+
+      setMessage('Inicio de sesión correcto. Redirigiendo...');
+      window.location.assign('/projects');
+    } catch (err) {
+      setError(err.message || 'No fue posible iniciar sesión.');
+    } finally {
       setIsSubmitting(false);
-      setMessage('Formulario valido. Login pendiente de integracion con API.');
-    }, 500);
+    }
   };
 
   return (
@@ -49,20 +77,20 @@ function Login() {
         <h1 className="login-card__brand">PROJECT STUDIO</h1>
 
         <div className="login-card__content">
-          <h2 className="login-card__title">Welcome to the Studio</h2>
+          <h2 className="login-card__title">Bienvenido al estudio</h2>
           <p className="login-card__subtitle">
-            Access your architectural portfolio and projects.
+            Accede a tu portafolio de proyectos y al espacio de trabajo del equipo.
           </p>
 
           <form className="login-form" onSubmit={handleSubmit}>
-            <label className="login-form__label" htmlFor="login-email">
-              EMAIL ADDRESS
+            <label className="login-form__label" htmlFor="login-username">
+              Usuario
             </label>
             <input
-              id="login-email"
-              type="email"
+              id="login-username"
+              type="text"
               className="login-form__input"
-              placeholder="architect@projectstudio.com"
+              placeholder="tu.nombre.usuario"
               value={credentials.username}
               onChange={(e) => handleChange('username', e.target.value)}
               autoComplete="username"
@@ -70,14 +98,14 @@ function Login() {
 
             <div className="login-form__row">
               <label className="login-form__label" htmlFor="login-password">
-                PASSWORD
+                Contraseña
               </label>
               <button
                 type="button"
                 className="login-form__link"
                 onClick={handleForgotPassword}
               >
-                FORGOT PASSWORD?
+                ¿Olvidaste tu contraseña?
               </button>
             </div>
             <input
@@ -90,17 +118,8 @@ function Login() {
               autoComplete="current-password"
             />
 
-            <label className="login-form__remember">
-              <input
-                type="checkbox"
-                checked={credentials.rememberMe}
-                onChange={(e) => handleChange('rememberMe', e.target.checked)}
-              />
-              <span>Remember me for 30 days</span>
-            </label>
-
             <button type="submit" className="login-form__submit" disabled={isSubmitting}>
-              {isSubmitting ? 'SIGNING IN...' : 'SIGN IN'}
+              {isSubmitting ? 'Entrando...' : 'Iniciar sesión'}
             </button>
 
             {error && <p className="login-form__feedback login-form__feedback--error">{error}</p>}

@@ -76,6 +76,9 @@ public class Task {
     @Column(name = "ESTIMATED_HOURS", precision = 4, scale = 2)
     private BigDecimal estimatedHours;
 
+    @Column(name = "ACTUAL_HOURS", precision = 5, scale = 2)
+    private BigDecimal actualHours;
+
     @Convert(converter = YnBooleanConverter.class)
     @Column(name = "IS_SUBTASK", length = 1)
     private Boolean subtask = false;

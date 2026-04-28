@@ -62,3 +62,9 @@ terraform destroy -auto-approve
 if state_done BYO_K8S; then
   kubectl delete ns mtdrworkshop
 fi
+
+echo "Deleting Auth Token"
+oci iam auth-token delete \
+  --user-id $TF_VAR_ociUserOcid \
+  --auth-token-id $(oci iam auth-token list --user-id $TF_VAR_ociUserOcid --query "data[?description=='mtdr login'].id | [0]" --raw-output) \
+  --force
