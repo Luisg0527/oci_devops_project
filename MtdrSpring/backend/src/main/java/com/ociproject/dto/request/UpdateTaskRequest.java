@@ -1,9 +1,7 @@
 package com.ociproject.dto.request;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -20,14 +18,9 @@ public class UpdateTaskRequest {
     private Long assignedTo;
     private LocalDate dueDate;
 
-    @Schema(description = "Planned hours for the task (max 4 h)", example = "2.50")
     @DecimalMin(value = "0.01", message = "estimatedHours must be greater than 0")
     @DecimalMax(value = "4.00", message = "estimatedHours must be at most 4")
     private BigDecimal estimatedHours;
-
-    @Schema(description = "Actual hours spent completing the task — recorded when status moves to DONE", example = "3.00")
-    @Positive(message = "actualHours must be greater than 0")
-    private BigDecimal actualHours;
 
     private Long parentTaskId;
 }

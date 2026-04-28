@@ -1,13 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import PageLayout from '../components/layout/PageLayout';
 import PriorityBadge from '../components/common/PriorityBadge';
 import StatusBadge from '../components/common/StatusBadge';
-import { teamMembers } from '../data/mockData';
+import { backlogTasks, teamMembers } from '../data/mockData';
 import './Backlog.css';
 
 const ITEMS_PER_PAGE = 5;
 const PRIORITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-const API_BASE = '/api/v1';
 
 const TASK_STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Pendiente' },
@@ -35,7 +34,7 @@ function parseDateStr(str) {
 }
 
 function Backlog() {
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(backlogTasks);
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [page, setPage] = useState(1);
@@ -44,51 +43,6 @@ function Backlog() {
   const [formError, setFormError] = useState('');
   const [sortBy, setSortBy] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-
-  useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      setLoadError('Inicia sesion para cargar el backlog.');
-      setIsLoading(false);
-      return;
-    }
-
-    const loadBacklog = async () => {
-      try {
-        setLoadError('');
-        setIsLoading(true);
-        const response = await fetch(`${API_BASE}/tasks?task_stage=BACKLOG&page=1&limit=200`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || 'No fue posible cargar tareas.');
-        }
-
-        const normalized = (payload.data || []).map((task) => ({
-          taskId: task.taskId,
-          title: task.title || 'Sin titulo',
-          priority: task.priority || 'MEDIUM',
-          status: task.status || 'PENDING',
-          assignedTo: task.assignedTo || null,
-          assignedToName: task.assigneeName || 'Sin asignar',
-          dueDate: task.dueDate || '',
-          taskStage: task.taskStage || 'BACKLOG',
-        }));
-        setTasks(normalized);
-      } catch (err) {
-        setLoadError(err.message || 'No fue posible cargar tareas.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadBacklog();
-  }, []);
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -152,7 +106,7 @@ function Backlog() {
       createdBy: 7,
       assignedTo: assignedUserId,
       assignedToName: member ? member.fullName : 'Sin asignar',
-      dueDate: newTask.dueDate,
+      dueDate: formatDate(newTask.dueDate),
       createdAt: new Date().toISOString(),
     };
     setTasks(prev => [task, ...prev]);
@@ -223,12 +177,6 @@ function Backlog() {
           </button>
         </div>
       </section>
-
-      {loadError && (
-        <div className="card mt-16" style={{ padding: 12, color: '#b42318' }}>
-          {loadError}
-        </div>
-      )}
 
       {/* New Task Form */}
       {showNewTask && (
@@ -301,16 +249,6 @@ function Backlog() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="text-sm text-muted">Cargando backlog...</td>
-              </tr>
-            )}
-            {!isLoading && paginated.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-sm text-muted">No hay tareas en backlog.</td>
-              </tr>
-            )}
             {paginated.map(task => (
               <tr key={task.taskId}>
                 <td className="backlog-task-name">{task.title}</td>
@@ -349,12 +287,12 @@ function Backlog() {
                 <td>
                   <div className="backlog-assignee">
                     <div className="backlog-assignee__avatar">
-                      {(task.assignedToName || 'SA').split(' ').map(n => n[0]).join('')}
+                      {task.assignedToName.split(' ').map(n => n[0]).join('')}
                     </div>
-                    <span>{task.assignedToName || 'Sin asignar'}</span>
+                    <span>{task.assignedToName}</span>
                   </div>
                 </td>
-                <td className="text-sm">{formatDate(task.dueDate)}</td>
+                <td className="text-sm">{task.dueDate}</td>
                 <td>
                   <button className="backlog-action-btn" onClick={() => handleDeleteTask(task.taskId)}>
                     <span className="material-icons">delete</span>

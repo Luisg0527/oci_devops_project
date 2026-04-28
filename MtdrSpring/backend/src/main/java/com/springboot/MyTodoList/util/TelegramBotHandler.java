@@ -64,7 +64,6 @@ public class TelegramBotHandler implements SpringLongPollingBot {
             actions.fnDelete();
             actions.fnHide();
             actions.fnLLM();
-            actions.fnPendingConversation();
             actions.fnElse();
         }
     }

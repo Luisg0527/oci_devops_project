@@ -9,7 +9,6 @@ const Backlog = lazy(() => import('./pages/Backlog'));
 const TeamManagement = lazy(() => import('./pages/TeamManagement'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Login = lazy(() => import('./pages/Login'));
-const Projects = lazy(() => import('./pages/Projects'));
 
 const Loading = () => (
   <div style={{
@@ -32,7 +31,6 @@ function Root() {
           <Route path="/team" component={TeamManagement} />
           <Route path="/reports" component={Reports} />
           <Route path="/login" component={Login} />
-          <Route path="/projects" component={Projects} />
         </Switch>
       </Suspense>
     </Router>

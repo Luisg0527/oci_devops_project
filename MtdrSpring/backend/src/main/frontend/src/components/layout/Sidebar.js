@@ -16,16 +16,15 @@ const bottomItems = [
 
 function Sidebar() {
   const history = useHistory();
-  const projectName = localStorage.getItem('currentProjectName') || 'Project Studio';
 
   return (
     <aside className="sidebar">
-      <div className="sidebar__brand" onClick={() => history.push('/projects')}>
+      <div className="sidebar__brand" onClick={() => history.push('/dashboard')}>
         <div className="sidebar__logo">
           <span className="material-icons">architecture</span>
         </div>
         <div>
-          <h1 className="sidebar__title">{projectName}</h1>
+          <h1 className="sidebar__title">Project Studio</h1>
           <span className="sidebar__subtitle">Espacio Empresarial</span>
         </div>
       </div>
@@ -44,7 +43,7 @@ function Sidebar() {
         ))}
       </nav>
 
-      <button className="sidebar__new-project btn btn--primary" onClick={() => history.push('/projects')}>
+      <button className="sidebar__new-project btn btn--primary" onClick={() => {}}>
         <span className="material-icons" style={{ fontSize: 18 }}>add</span>
         <span>Nuevo Proyecto</span>
       </button>

@@ -1,7 +1,6 @@
 package com.ociproject.dto.response;
 
 import com.ociproject.model.Task;
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
 
@@ -31,12 +30,7 @@ public class TaskResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Boolean isDeleted;
-    @Schema(description = "Planned hours for the task (max 4 h)", example = "2.50")
     private BigDecimal estimatedHours;
-
-    @Schema(description = "Actual hours spent — recorded when the task is marked DONE via /complete", example = "3.00")
-    private BigDecimal actualHours;
-
     private Boolean isSubtask;
     private Long parentTaskId;
     private String parentTaskTitle;
@@ -88,7 +82,6 @@ public class TaskResponse {
                 .updatedAt(task.getUpdatedAt())
                 .isDeleted(task.getDeleted())
                 .estimatedHours(task.getEstimatedHours())
-                .actualHours(task.getActualHours())
                 .isSubtask(task.getSubtask())
                 .parentTaskId(task.getParentTask() != null ? task.getParentTask().getTaskId() : null)
                 .parentTaskTitle(task.getParentTask() != null ? task.getParentTask().getTitle() : null)

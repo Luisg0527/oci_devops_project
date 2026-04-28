@@ -17,9 +17,12 @@ steps:
               ls /usr/lib64/graalvm/
 
   - type: Command
+    name: "Set PATH Variable"
+    command: export PATH=$JAVA_HOME/bin:$PATH
+
+  - type: Command
     name: "Docker Login"
-    command:  export PATH=$JAVA_HOME/bin:$PATH;
-              cd MtdrSpring;
+    command:  cd MtdrSpring;
               oci os object get --bucket-name reacttodo-zofjd --name deployment_config.tgz --file deployment_config.tgz;
               tar -xzvf deployment_config.tgz;
               source env.sh;
@@ -27,8 +30,7 @@ steps:
 
   - type: Command
     name: "Build"
-    command:  export PATH=$JAVA_HOME/bin:$PATH;
-              cd MtdrSpring;
+    command:  cd MtdrSpring;
               source env.sh;
               (cd backend;source build.sh)
 

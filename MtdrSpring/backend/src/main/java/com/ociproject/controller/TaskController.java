@@ -247,7 +247,6 @@ public class TaskController {
         if (request.getDueDate() != null) task.setDueDate(request.getDueDate());
         if (request.getTaskStage() != null) task.setTaskStage(Task.Stage.valueOf(request.getTaskStage()));
         if (request.getEstimatedHours() != null) task.setEstimatedHours(request.getEstimatedHours());
-        if (request.getActualHours() != null) task.setActualHours(request.getActualHours());
         if (request.getParentTaskId() != null) {
             Task parentTask = taskService.findById(request.getParentTaskId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent task not found."));
