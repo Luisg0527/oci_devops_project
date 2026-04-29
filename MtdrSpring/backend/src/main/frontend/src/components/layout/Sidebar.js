@@ -9,24 +9,16 @@ const navItems = [
   { to: '/reports', icon: 'bar_chart', label: 'Reportes' },
 ];
 
-const bottomItems = [
-  { icon: 'settings', label: 'Configuración' },
-  { icon: 'help_outline', label: 'Soporte' },
-];
-
 function Sidebar() {
   const history = useHistory();
-  const projectName = localStorage.getItem('currentProjectName') || 'Project Studio';
+  const activeProject = localStorage.getItem('currentProjectName') || 'Sin proyecto';
 
   return (
     <aside className="sidebar">
-      <div className="sidebar__brand" onClick={() => history.push('/projects')}>
-        <div className="sidebar__logo">
-          <span className="material-icons">architecture</span>
-        </div>
+      <div className="sidebar__brand" onClick={() => history.push('/dashboard')}>
         <div>
-          <h1 className="sidebar__title">{projectName}</h1>
-          <span className="sidebar__subtitle">Espacio Empresarial</span>
+          <h1 className="sidebar__title">Project Studio</h1>
+          <span className="sidebar__subtitle">Proyecto activo: {activeProject}</span>
         </div>
       </div>
 
@@ -43,20 +35,6 @@ function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <button className="sidebar__new-project btn btn--primary" onClick={() => history.push('/projects')}>
-        <span className="material-icons" style={{ fontSize: 18 }}>add</span>
-        <span>Nuevo Proyecto</span>
-      </button>
-
-      <div className="sidebar__bottom">
-        {bottomItems.map(item => (
-          <button key={item.label} className="sidebar__link sidebar__link--bottom">
-            <span className="material-icons">{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
     </aside>
   );
 }

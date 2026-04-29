@@ -164,6 +164,197 @@
   margin-top: 4px;
 }
 
+.backlog-sprint-board {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 18px;
+  align-items: stretch;
+  padding: 20px;
+}
+
+.backlog-sprint-board__current {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.backlog-sprint-board::before {
+  content: '';
+  grid-column: 2;
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.backlog-sprint-board__others {
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.backlog-sprint-board__kicker {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  opacity: 0.72;
+  font-weight: 700;
+}
+
+.backlog-sprint-board__main {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.backlog-sprint-board__main.is-active {
+  background: transparent;
+}
+
+.backlog-sprint-board__item.is-active {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.09);
+  position: relative;
+}
+
+.backlog-sprint-board__item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 999px;
+  background: #f2b33d;
+}
+
+.backlog-sprint-board__main h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.15;
+  font-weight: 700;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.backlog-sprint-board__status {
+  display: block;
+  margin: 10px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.76;
+}
+
+.backlog-sprint-board__active-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(242, 179, 61, 0.2);
+  color: #ffd98b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.backlog-sprint-board__active-pill + .backlog-sprint-board__status {
+  margin-top: 8px;
+}
+
+.backlog-sprint-board__progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.backlog-sprint-board__progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+.backlog-sprint-board__progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.backlog-sprint-board__progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #f2b33d;
+}
+
+.backlog-sprint-board__add {
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.backlog-sprint-board__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.backlog-sprint-board__item {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backlog-sprint-board__item strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.15;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.backlog-sprint-board__item em {
+  font-style: normal;
+  font-size: 34px;
+  font-weight: 700;
+  color: #f2b33d;
+}
+
+.backlog-sprint-board__empty {
+  font-size: 13px;
+  opacity: 0.78;
+}
+
 /* Sortable headers */
 .backlog-th-sortable {
   cursor: pointer;
@@ -303,4 +494,38 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+@media (max-width: 980px) {
+  .backlog-sprint-board {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  .backlog-sprint-board::before {
+    display: none;
+  }
+
+  .backlog-sprint-board__current,
+  .backlog-sprint-board__others {
+    grid-column: auto;
+  }
+
+  .backlog-sprint-board__current {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 16px;
+  }
+
+  .backlog-sprint-board__main h3 {
+    font-size: 18px;
+  }
+
+  .backlog-sprint-board__item strong {
+    font-size: 14px;
+  }
+
+  .backlog-sprint-board__item.is-active::before {
+    top: 6px;
+    bottom: 6px;
+  }
 }

@@ -2,9 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE } from '../../config/apiBase';
 import './TopNavBar.css';
 
-function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
+function TopNavBar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+  const [projects, setProjects] = useState([]);
+  const [currentProjectId, setCurrentProjectId] = useState(localStorage.getItem('currentProjectId') || '');
+  const [currentProjectName, setCurrentProjectName] = useState(localStorage.getItem('currentProjectName') || 'Selecciona proyecto');
   const menuRef = useRef(null);
+  const projectMenuRef = useRef(null);
 
   const userData = useMemo(() => {
     const fullName = localStorage.getItem('userFullName');
@@ -21,11 +26,65 @@ function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setIsMenuOpen(false);
       }
+      if (projectMenuRef.current && !projectMenuRef.current.contains(event.target)) {
+        setIsProjectMenuOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
+
+    const loadProjects = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/projects?page=1&limit=100`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) return;
+        const data = Array.isArray(payload.data) ? payload.data : [];
+        setProjects(data);
+        if (data.length === 0) {
+          setCurrentProjectId('');
+          setCurrentProjectName('Sin proyectos');
+          localStorage.removeItem('currentProjectId');
+          localStorage.removeItem('currentProjectName');
+          return;
+        }
+
+        const storedId = localStorage.getItem('currentProjectId');
+        const selected = data.find((project) => String(project.projectId) === String(storedId)) || data[0];
+        setCurrentProjectId(String(selected.projectId));
+        setCurrentProjectName(selected.name || 'Proyecto');
+        localStorage.setItem('currentProjectId', String(selected.projectId));
+        localStorage.setItem('currentProjectName', selected.name || 'Proyecto');
+      } catch (error) {
+        // Si falla, se conserva el último proyecto seleccionado.
+      }
+    };
+
+    loadProjects();
+  }, []);
+
+  const handleProjectSelect = (project) => {
+    const projectId = String(project.projectId);
+    if (projectId === currentProjectId) {
+      setIsProjectMenuOpen(false);
+      return;
+    }
+    localStorage.setItem('currentProjectId', projectId);
+    localStorage.setItem('currentProjectName', project.name || 'Proyecto');
+    setCurrentProjectId(projectId);
+    setCurrentProjectName(project.name || 'Proyecto');
+    setIsProjectMenuOpen(false);
+    window.location.reload();
+  };
 
   const handleLogout = async () => {
     const token = localStorage.getItem('authToken');
@@ -48,6 +107,9 @@ function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
       localStorage.removeItem('userFullName');
       localStorage.removeItem('userEmail');
       localStorage.removeItem('userRole');
+      localStorage.removeItem('userTeamId');
+      localStorage.removeItem('currentProjectId');
+      localStorage.removeItem('currentProjectName');
       window.location.assign('/login');
     }
   };
@@ -55,14 +117,35 @@ function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
   return (
     <header className="topnav">
       <div className="topnav__left">
-        <span className="topnav__brand">Architect Prime</span>
-        <div className="topnav__search">
-          <span className="material-icons topnav__search-icon">search</span>
-          <input
-            type="text"
-            className="topnav__search-input"
-            placeholder={searchPlaceholder}
-          />
+        <div className="topnav__project" ref={projectMenuRef}>
+          <span className="topnav__project-label">Proyecto</span>
+          <button
+            type="button"
+            className="topnav__project-trigger"
+            onClick={() => setIsProjectMenuOpen((prev) => !prev)}
+            aria-expanded={isProjectMenuOpen}
+            aria-label="Cambiar proyecto"
+          >
+            <span className="topnav__project-name">{currentProjectName}</span>
+            <span className="material-icons">expand_more</span>
+          </button>
+          {isProjectMenuOpen && (
+            <div className="topnav__project-menu">
+              {projects.map((project) => (
+                <button
+                  key={project.projectId}
+                  type="button"
+                  className={`topnav__project-item ${String(project.projectId) === currentProjectId ? 'topnav__project-item--active' : ''}`}
+                  onClick={() => handleProjectSelect(project)}
+                >
+                  {project.name}
+                </button>
+              ))}
+              {projects.length === 0 && (
+                <div className="topnav__project-empty">No hay proyectos disponibles</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

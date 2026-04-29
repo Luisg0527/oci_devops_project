@@ -5,7 +5,7 @@
   background: var(--color-bg-sidebar);
   display: flex;
   flex-direction: column;
-  padding: 24px 16px;
+  padding: 26px 16px;
   box-sizing: border-box;
   z-index: 100;
   border-right: 1px solid var(--color-border);
@@ -13,57 +13,47 @@
 }
 
 .sidebar__brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 8px;
-  margin-bottom: 32px;
+  padding: 0 11px;
+  margin-bottom: 20px;
   cursor: pointer;
 }
 
-.sidebar__logo {
-  width: 36px;
-  height: 36px;
-  background: var(--color-primary);
-  border-radius: var(--border-radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-white);
-  flex-shrink: 0;
-}
-
-.sidebar__logo .material-icons {
-  font-size: 20px;
-}
-
 .sidebar__title {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
   margin: 0;
   color: var(--color-text-primary);
+  letter-spacing: -0.02em;
 }
 
 .sidebar__subtitle {
   font-size: 10px;
+  margin-top: 7px;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
   color: var(--color-text-secondary);
 }
 
 .sidebar__nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   flex: 1;
 }
 
 .sidebar__link {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 13px;
+  padding: 11px 13px;
   border-radius: var(--border-radius-sm);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--color-text-secondary);
   text-decoration: none;
   border: none;
@@ -76,35 +66,16 @@
 }
 
 .sidebar__link:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: #efedeb;
   color: var(--color-text-primary);
 }
 
 .sidebar__link--active {
-  background: var(--color-bg-card);
+  background: #efedeb;
   color: var(--color-text-primary);
-  font-weight: 600;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .sidebar__link .material-icons {
   font-size: 20px;
-}
-
-.sidebar__new-project {
-  margin: 16px 0;
-  width: 100%;
-  justify-content: center;
-}
-
-.sidebar__bottom {
-  border-top: 1px solid var(--color-border);
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sidebar__link--bottom {
-  font-size: 14px;
 }

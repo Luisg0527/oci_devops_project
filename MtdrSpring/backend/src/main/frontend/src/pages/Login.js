@@ -61,9 +61,32 @@ function Login() {
       if (payload.userId != null) localStorage.setItem('userId', String(payload.userId));
       if (payload.fullName) localStorage.setItem('userFullName', payload.fullName);
       if (payload.role) localStorage.setItem('userRole', payload.role);
+      if (payload.teamId != null) localStorage.setItem('userTeamId', String(payload.teamId));
+      else localStorage.removeItem('userTeamId');
+
+      try {
+        const projectsResponse = await fetch(`${API_BASE}/projects?page=1&limit=100`, {
+          headers: {
+            Authorization: `Bearer ${payload.token}`,
+          },
+        });
+        const projectsPayload = await projectsResponse.json().catch(() => ({}));
+        const projects = Array.isArray(projectsPayload.data) ? projectsPayload.data : [];
+        if (projects.length > 0) {
+          const storedProjectId = localStorage.getItem('currentProjectId');
+          const selectedProject = projects.find((project) => String(project.projectId) === String(storedProjectId)) || projects[0];
+          localStorage.setItem('currentProjectId', String(selectedProject.projectId));
+          localStorage.setItem('currentProjectName', selectedProject.name || 'Proyecto');
+        } else {
+          localStorage.removeItem('currentProjectId');
+          localStorage.removeItem('currentProjectName');
+        }
+      } catch (projectError) {
+        // Si no se puede cargar proyectos en login, se resolverá en el selector global.
+      }
 
       setMessage('Inicio de sesión correcto. Redirigiendo...');
-      window.location.assign('/projects');
+      window.location.assign('/dashboard');
     } catch (err) {
       setError(err.message || 'No fue posible iniciar sesión.');
     } finally {

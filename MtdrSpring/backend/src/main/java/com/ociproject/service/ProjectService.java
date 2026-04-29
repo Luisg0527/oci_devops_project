@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -90,5 +91,34 @@ public class ProjectService {
         project.setDeleted(true);
         project.setDeletedAt(LocalDateTime.now());
         projectRepository.save(project);
+    }
+
+    @Transactional
+    public ProjectSprint assignSprint(Long projectId, Sprint sprint, boolean active) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new EntityNotFoundException("Project not found: " + projectId));
+
+        List<ProjectSprint> currentSprints = projectSprintRepository.findByIdProjectId(projectId);
+        int nextSprintNumber = currentSprints.stream()
+                .map(ProjectSprint::getSprintNumber)
+                .filter(number -> number != null && number > 0)
+                .max(Comparator.naturalOrder())
+                .orElse(0) + 1;
+
+        if (active) {
+            currentSprints.stream()
+                    .filter(ps -> Boolean.TRUE.equals(ps.getActive()))
+                    .forEach(ps -> ps.setActive(false));
+            projectSprintRepository.saveAll(currentSprints);
+        }
+
+        ProjectSprint projectSprint = ProjectSprint.builder()
+                .id(new ProjectSprintId(projectId, sprint.getSprintId()))
+                .project(project)
+                .sprint(sprint)
+                .sprintNumber(nextSprintNumber)
+                .active(active)
+                .build();
+        return projectSprintRepository.save(projectSprint);
     }
 }

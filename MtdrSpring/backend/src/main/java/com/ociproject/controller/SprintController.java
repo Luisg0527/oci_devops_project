@@ -111,10 +111,15 @@ public class SprintController {
                 .deleted(false)
                 .build();
         sprint = sprintService.save(sprint);
+        boolean isActive = sprint.getStatus() == Sprint.Status.ACTIVE;
+        ProjectSprint projectSprint = projectService.assignSprint(request.getProjectId(), sprint, isActive);
         auditLogService.log(actor, "CREATE", "SPRINTS", sprint.getSprintId(), httpRequest.getRemoteAddr());
 
         SprintResponse response = SprintResponse.from(sprint);
         response.setProjectId(request.getProjectId());
+        response.setSprintNumber(projectSprint.getSprintNumber());
+        response.setIsActive(Boolean.TRUE.equals(projectSprint.getActive()));
+        enrichSprintWithTasks(sprint, response);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

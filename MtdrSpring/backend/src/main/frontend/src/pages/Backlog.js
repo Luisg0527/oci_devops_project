@@ -21,6 +21,11 @@ const TASK_PRIORITY_OPTIONS = [
   { value: 'MEDIUM', label: 'Media' },
   { value: 'LOW', label: 'Baja' },
 ];
+const SPRINT_STATUS_OPTIONS = [
+  { value: 'PLANNED', label: 'Planeado' },
+  { value: 'ACTIVE', label: 'Activo' },
+  { value: 'CLOSED', label: 'Cerrado' },
+];
 
 function taskStageForStatus(status) {
   if (status === 'DONE') return 'COMPLETED';
@@ -42,24 +47,79 @@ function Backlog() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
   const [formError, setFormError] = useState('');
+  const [showNewSprint, setShowNewSprint] = useState(false);
+  const [newSprint, setNewSprint] = useState({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
+  const [sprintError, setSprintError] = useState('');
+  const [sprints, setSprints] = useState([]);
+  const [selectedSprintId, setSelectedSprintId] = useState('BACKLOG');
   const [sortBy, setSortBy] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
+    const projectId = localStorage.getItem('currentProjectId');
     const token = localStorage.getItem('authToken');
     if (!token) {
       setLoadError('Inicia sesion para cargar el backlog.');
+      return;
+    }
+    if (!projectId) {
+      setLoadError('Selecciona un proyecto para cargar los sprints.');
+      return;
+    }
+
+    const loadSprints = async () => {
+      try {
+        const sprintResponse = await fetch(`${API_BASE}/sprints?project_id=${projectId}&page=1&limit=50`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const sprintPayload = await sprintResponse.json().catch(() => ({}));
+        if (!sprintResponse.ok) {
+          throw new Error(sprintPayload.error || 'No fue posible cargar sprints.');
+        }
+        const loadedSprints = Array.isArray(sprintPayload.data) ? sprintPayload.data : [];
+        setSprints(loadedSprints);
+        if (
+          selectedSprintId !== 'BACKLOG' &&
+          !loadedSprints.some((sprint) => String(sprint.sprintId) === String(selectedSprintId))
+        ) {
+          setSelectedSprintId('BACKLOG');
+        }
+      } catch (err) {
+        setLoadError(err.message || 'No fue posible cargar sprints.');
+      }
+    };
+
+    loadSprints();
+  }, [selectedSprintId]);
+
+  useEffect(() => {
+    const projectId = localStorage.getItem('currentProjectId');
+    const token = localStorage.getItem('authToken');
+    if (!token || !projectId) {
       setIsLoading(false);
       return;
     }
 
-    const loadBacklog = async () => {
+    const loadTasks = async () => {
       try {
         setLoadError('');
         setIsLoading(true);
-        const response = await fetch(`${API_BASE}/tasks?task_stage=BACKLOG&page=1&limit=200`, {
+        const params = new URLSearchParams({
+          page: '1',
+          limit: '200',
+          project_id: projectId,
+        });
+        if (selectedSprintId === 'BACKLOG') {
+          params.set('task_stage', 'BACKLOG');
+        } else {
+          params.set('sprint_id', selectedSprintId);
+        }
+
+        const response = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -74,6 +134,7 @@ function Backlog() {
           title: task.title || 'Sin titulo',
           priority: task.priority || 'MEDIUM',
           status: task.status || 'PENDING',
+          sprintId: task.sprintId ?? null,
           assignedTo: task.assignedTo || null,
           assignedToName: task.assigneeName || 'Sin asignar',
           dueDate: task.dueDate || '',
@@ -87,8 +148,8 @@ function Backlog() {
       }
     };
 
-    loadBacklog();
-  }, []);
+    loadTasks();
+  }, [selectedSprintId]);
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -117,6 +178,29 @@ function Backlog() {
       return 0;
     });
   }, [tasks, filterPriority, filterStatus, sortBy, sortDir]);
+
+  const activeSprint = useMemo(
+    () => sprints.find((sprint) => sprint.isActive || sprint.status === 'ACTIVE') || null,
+    [sprints]
+  );
+
+  const otherSprints = useMemo(() => {
+    return sprints
+      .filter((sprint) => !activeSprint || sprint.sprintId !== activeSprint.sprintId)
+      .sort((a, b) => (b.sprintNumber || 0) - (a.sprintNumber || 0));
+  }, [sprints, activeSprint]);
+
+  const sprintTitle = (sprint) => {
+    if (!sprint) return 'Sin sprint activo';
+    if (sprint.sprintNumber) return `Sprint ${sprint.sprintNumber}: ${sprint.name}`;
+    return sprint.name;
+  };
+
+  const sprintStatusLabel = (status) => {
+    if (status === 'ACTIVE') return 'EN CURSO';
+    if (status === 'CLOSED') return 'FINALIZADO';
+    return 'PLANEADO';
+  };
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE));
   const paginated = sorted.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -159,6 +243,57 @@ function Backlog() {
     setNewTask({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
     setShowNewTask(false);
     setPage(1);
+  };
+
+  const handleAddSprint = async (event) => {
+    event.preventDefault();
+    const token = localStorage.getItem('authToken');
+    const projectId = localStorage.getItem('currentProjectId');
+    const missing = [];
+    if (!newSprint.name.trim()) missing.push('Nombre');
+    if (!newSprint.startDate) missing.push('Fecha inicio');
+    if (!newSprint.endDate) missing.push('Fecha fin');
+    if (!projectId) missing.push('Proyecto seleccionado');
+    if (missing.length > 0) {
+      setSprintError(`Campos requeridos: ${missing.join(', ')}`);
+      return;
+    }
+    if (!token) {
+      setSprintError('Inicia sesión para crear sprint.');
+      return;
+    }
+    if (newSprint.endDate < newSprint.startDate) {
+      setSprintError('La fecha fin debe ser mayor o igual que la fecha inicio.');
+      return;
+    }
+
+    try {
+      setSprintError('');
+      const response = await fetch(`${API_BASE}/sprints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newSprint.name.trim(),
+          startDate: newSprint.startDate,
+          endDate: newSprint.endDate,
+          status: newSprint.status || undefined,
+          projectId: Number(projectId),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible crear sprint.');
+      }
+      setSprints((prev) => [payload, ...prev]);
+      setSelectedSprintId(String(payload.sprintId));
+      setNewSprint({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
+      setShowNewSprint(false);
+    } catch (err) {
+      setSprintError(err.message || 'No fue posible crear sprint.');
+    }
   };
 
   const handleDeleteTask = (taskId) => {
@@ -228,6 +363,55 @@ function Backlog() {
         <div className="card mt-16" style={{ padding: 12, color: '#b42318' }}>
           {loadError}
         </div>
+      )}
+
+      {/* New Sprint Form */}
+      {showNewSprint && (
+        <form className="backlog-new-task card mt-16" onSubmit={handleAddSprint}>
+          <input
+            type="text"
+            className="backlog-input"
+            placeholder="Nombre del sprint..."
+            value={newSprint.name}
+            onChange={(e) => setNewSprint((prev) => ({ ...prev, name: e.target.value }))}
+            autoFocus
+          />
+          <input
+            type="date"
+            className="backlog-input backlog-input--sm"
+            value={newSprint.startDate}
+            onChange={(e) => setNewSprint((prev) => ({ ...prev, startDate: e.target.value }))}
+          />
+          <input
+            type="date"
+            className="backlog-input backlog-input--sm"
+            value={newSprint.endDate}
+            onChange={(e) => setNewSprint((prev) => ({ ...prev, endDate: e.target.value }))}
+          />
+          <select
+            className="backlog-select"
+            value={newSprint.status}
+            onChange={(e) => setNewSprint((prev) => ({ ...prev, status: e.target.value }))}
+          >
+            {SPRINT_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <button type="submit" className="btn btn--primary btn--small">Guardar Sprint</button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--small"
+            onClick={() => { setShowNewSprint(false); setSprintError(''); }}
+          >
+            Cancelar
+          </button>
+          {sprintError && (
+            <span className="backlog-form-error">
+              <span className="material-icons" style={{ fontSize: 16 }}>warning</span>
+              {sprintError}
+            </span>
+          )}
+        </form>
       )}
 
       {/* New Task Form */}
@@ -397,6 +581,77 @@ function Backlog() {
           </div>
         </div>
       </div>
+
+      <section className="card card--dark mt-24 backlog-sprint-board">
+        <div className="backlog-sprint-board__current">
+          <span className="backlog-sprint-board__kicker">Sprint actual</span>
+          <button
+            type="button"
+            className={`backlog-sprint-board__main ${selectedSprintId === (activeSprint ? String(activeSprint.sprintId) : 'BACKLOG') ? 'is-active' : ''}`}
+            onClick={() => {
+              if (!activeSprint || selectedSprintId === String(activeSprint.sprintId)) {
+                setSelectedSprintId('BACKLOG');
+              } else {
+                setSelectedSprintId(String(activeSprint.sprintId));
+              }
+            }}
+          >
+            <h3>{sprintTitle(activeSprint)}</h3>
+              {selectedSprintId === (activeSprint ? String(activeSprint.sprintId) : 'BACKLOG') && (
+                <span className="backlog-sprint-board__active-pill">Filtrando</span>
+              )}
+            <p className="backlog-sprint-board__status">
+              {activeSprint ? sprintStatusLabel(activeSprint.status) : 'Mostrando tareas en backlog'}
+            </p>
+          </button>
+          <div className="backlog-sprint-board__progress-wrap">
+            <div className="backlog-sprint-board__progress-label">
+              <span>Progreso general</span>
+              <strong>{activeSprint?.velocityPercent ?? 0}%</strong>
+            </div>
+            <div className="backlog-sprint-board__progress-track">
+              <div
+                className="backlog-sprint-board__progress-fill"
+                style={{ width: `${Math.max(0, Math.min(100, activeSprint?.velocityPercent ?? 0))}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="backlog-sprint-board__others">
+          <span className="backlog-sprint-board__kicker">Otros sprints</span>
+          <div className="backlog-sprint-board__list">
+            {otherSprints.slice(0, 2).map((sprint) => (
+              <button
+                key={sprint.sprintId}
+                type="button"
+                className={`backlog-sprint-board__item ${selectedSprintId === String(sprint.sprintId) ? 'is-active' : ''}`}
+                onClick={() => setSelectedSprintId(String(sprint.sprintId))}
+              >
+                <div>
+                  <strong>{sprintTitle(sprint)}</strong>
+                  {selectedSprintId === String(sprint.sprintId) && (
+                    <span className="backlog-sprint-board__active-pill">Filtrando</span>
+                  )}
+                  <span className="backlog-sprint-board__status">{sprintStatusLabel(sprint.status)}</span>
+                </div>
+                <em>{sprint.velocityPercent ?? 0}%</em>
+              </button>
+            ))}
+            {otherSprints.length === 0 && (
+              <div className="backlog-sprint-board__empty">No hay otros sprints registrados.</div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="backlog-sprint-board__add"
+            onClick={() => { setShowNewSprint(!showNewSprint); setSprintError(''); }}
+          >
+            <span className="material-icons" style={{ fontSize: 16 }}>add</span>
+            Añadir sprint
+          </button>
+        </div>
+      </section>
 
       {/* Contextual Insights */}
       <div className="backlog-insights mt-24">

@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -25,14 +26,28 @@ public class DashboardController {
     private final SprintService sprintService;
     private final ProjectService projectService;
 
+    private String roleFromContext() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getAuthorities() == null) return "USER";
+        return auth.getAuthorities().stream()
+                .map(a -> a.getAuthority())
+                .filter(Objects::nonNull)
+                .filter(a -> a.startsWith("ROLE_"))
+                .map(a -> a.substring("ROLE_".length()))
+                .findFirst()
+                .orElse("USER");
+    }
+
     @GetMapping
     public ResponseEntity<?> getDashboard(@AuthenticationPrincipal User currentUser) {
         // User info
         Map<String, Object> user = new LinkedHashMap<>();
         user.put("user_id", currentUser.getUserId());
         user.put("full_name", currentUser.getFullName());
-        user.put("role", currentUser.getRole() != null ? currentUser.getRole().getRoleName() : null);
-        user.put("team_name", currentUser.getTeam() != null ? currentUser.getTeam().getName() : null);
+        // Use role from JWT-auth context to avoid lazy-loading Role proxy here.
+        user.put("role", roleFromContext());
+        // Team is LAZY in User entity; avoid forcing it in this endpoint.
+        user.put("team_name", null);
 
         // My tasks
         List<Task> myTasks = taskService.findByAssignee(currentUser.getUserId());
