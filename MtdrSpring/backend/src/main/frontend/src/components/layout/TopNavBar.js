@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { currentUser } from '../../data/mockData';
+import AIChatDrawer from '../ai/AIChatDrawer';
 import './TopNavBar.css';
 
 function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
+  const [aiOpen, setAiOpen] = useState(false);
   return (
     <header className="topnav">
       <div className="topnav__left">
@@ -21,7 +23,7 @@ function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
         <button className="topnav__icon-btn">
           <span className="material-icons">notifications_none</span>
         </button>
-        <button className="topnav__icon-btn">
+        <button className="topnav__icon-btn" onClick={() => setAiOpen(true)} title="Asistente IA">
           <span className="material-icons">chat_bubble_outline</span>
         </button>
         <div className="topnav__divider" />
@@ -35,6 +37,7 @@ function TopNavBar({ searchPlaceholder = 'Buscar recursos...' }) {
           </div>
         </div>
       </div>
+      <AIChatDrawer open={aiOpen} onClose={() => setAiOpen(false)} />
     </header>
   );
 }
