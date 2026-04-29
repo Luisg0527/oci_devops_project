@@ -8,6 +8,8 @@ import com.ociproject.model.BotInteraction;
 import com.ociproject.model.BotInteractionId;
 import com.ociproject.model.User;
 import com.ociproject.service.BotInteractionService;
+import com.ociproject.service.ai.ContextDumperService.DocumentRef;
+import com.ociproject.service.ai.ContextDumperService.DumpResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,38 +32,31 @@ public class AIInsightsService {
             Se conciso y directo.
             """;
 
-    private final EmbeddingService embeddingService;
-    private final VectorStore vectorStore;
+    private final ContextDumperService contextDumperService;
     private final DeepSeekService deepSeekService;
     private final BotInteractionService botInteractionService;
     private final AiProperties props;
 
-    public AIInsightsService(EmbeddingService embeddingService,
-                             VectorStore vectorStore,
+    public AIInsightsService(ContextDumperService contextDumperService,
                              DeepSeekService deepSeekService,
                              BotInteractionService botInteractionService,
                              AiProperties props) {
-        this.embeddingService = embeddingService;
-        this.vectorStore = vectorStore;
+        this.contextDumperService = contextDumperService;
         this.deepSeekService = deepSeekService;
         this.botInteractionService = botInteractionService;
         this.props = props;
     }
 
     public AiAnswerResponse answer(User askingUser, String question, List<ChatTurn> history) {
-        float[] queryVec = embeddingService.embedQuery(question);
-        int k = Math.max(1, props.getRag().getTopK());
-        List<ScoredDoc> top = vectorStore.topK(queryVec, k, null);
+        DumpResult dump = contextDumperService.dumpAll(props.getRag().getMaxContextChars());
+        String reply = deepSeekService.chat(SYSTEM_PROMPT, history, question, dump.contextBlock());
 
-        String contextBlock = buildContextBlock(top, props.getRag().getMaxContextChars());
-        String reply = deepSeekService.chat(SYSTEM_PROMPT, history, question, contextBlock);
-
-        List<Citation> citations = new ArrayList<>(top.size());
-        for (ScoredDoc d : top) {
+        List<Citation> citations = new ArrayList<>(dump.included().size());
+        for (DocumentRef ref : dump.included()) {
             citations.add(Citation.builder()
-                    .sourceType(d.sourceType().name())
-                    .sourceId(d.sourceId())
-                    .score(round4(d.score()))
+                    .sourceType(ref.sourceType().name())
+                    .sourceId(ref.sourceId())
+                    .score(1.0)
                     .build());
         }
 
@@ -82,20 +77,5 @@ public class AIInsightsService {
                 .answer(reply)
                 .citations(citations)
                 .build();
-    }
-
-    private static String buildContextBlock(List<ScoredDoc> docs, int maxChars) {
-        StringBuilder sb = new StringBuilder();
-        for (ScoredDoc d : docs) {
-            String header = "[" + d.sourceType().name() + "#" + d.sourceId() + "]\n";
-            String entry = header + d.content().trim() + "\n---\n";
-            if (sb.length() + entry.length() > maxChars) break;
-            sb.append(entry);
-        }
-        return sb.toString();
-    }
-
-    private static double round4(double v) {
-        return Math.round(v * 10000.0) / 10000.0;
     }
 }
