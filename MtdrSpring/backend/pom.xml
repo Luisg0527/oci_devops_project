@@ -113,6 +113,13 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!-- OCI Generative AI (embeddings) -->
+		<dependency>
+			<groupId>com.oracle.oci.sdk</groupId>
+			<artifactId>oci-java-sdk-generativeaiinference</artifactId>
+			<version>3.46.1</version>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>
