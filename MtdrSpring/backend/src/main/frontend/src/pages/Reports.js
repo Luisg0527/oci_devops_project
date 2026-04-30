@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import PageLayout from '../components/layout/PageLayout';
 import ProgressBar from '../components/common/ProgressBar';
+import { API_BASE } from '../config/apiBase';
 import './Reports.css';
-
-// ── API setup ─────────────────────────────────────────────────────────────────
-const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8080';
 
 function getToken() {
   return localStorage.getItem('token') || localStorage.getItem('authToken');
 }
 
-async function apiFetch(path) {
+async function apiFetch(resourceQuery) {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
+  const q = resourceQuery.startsWith('/') ? resourceQuery.slice(1) : resourceQuery;
+  const url = `${String(API_BASE).replace(/\/$/, '')}/${q}`;
+  const res = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -53,30 +53,79 @@ const C = {
 
 // ── KPI metadata ──────────────────────────────────────────────────────────────
 const KPI_META = {
-  TAREAS_COMPLETADAS_SPRINT:     { label: 'Tareas Completadas',         icon: 'task_alt' },
-  CUMPLIMIENTO_SPRINT:           { label: 'Cumplimiento Sprint',         icon: 'verified' },
-  TAREAS_REABIERTAS:             { label: 'Tareas Reabiertas',           icon: 'restart_alt' },
-  ACTUALIZACION_TAREAS_DIA:      { label: 'Actualización Diaria',        icon: 'update' },
-  TRAZABILIDAD_TAREAS:           { label: 'Trazabilidad Tareas',         icon: 'timeline' },
-  DESPLIEGUES_PRODUCCION_SPRINT: { label: 'Despliegues a Producción',    icon: 'rocket_launch' },
-  MTTR:                          { label: 'MTTR (Recuperación)',         icon: 'schedule' },
-  TASA_EXITO_DESPLIEGUES:        { label: 'Éxito en Despliegues',        icon: 'check_circle' },
-  INTERACCIONES_BOT:             { label: 'Interacciones del Bot',       icon: 'smart_toy' },
-  DISPONIBILIDAD_SERVICIO:       { label: 'Disponibilidad del Servicio', icon: 'cloud_done' },
-  USO_CPU:                       { label: 'Uso de CPU',                  icon: 'memory' },
-  USO_MEMORIA:                   { label: 'Uso de Memoria RAM',          icon: 'storage' },
-  INCIDENTES_SEGURIDAD:          { label: 'Incidentes de Seguridad',     icon: 'security' },
+  TAREAS_COMPLETADAS_SPRINT: { label: 'Tareas Completadas', icon: 'task_alt' },
+  CUMPLIMIENTO_SPRINT: { label: 'Cumplimiento Sprint', icon: 'verified' },
+  TAREAS_REABIERTAS: { label: 'Tareas Reabiertas', icon: 'restart_alt' },
+  ACTUALIZACION_TAREAS_DIA: { label: 'Actualización Diaria', icon: 'update' },
+  TRAZABILIDAD_TAREAS: { label: 'Trazabilidad Tareas', icon: 'timeline' },
 };
 
+/** Orden visual del dashboard (solo estas 5 tarjetas). */
+const DASHBOARD_KPI_ORDER = [
+  'CUMPLIMIENTO_SPRINT',
+  'TAREAS_COMPLETADAS_SPRINT',
+  'TRAZABILIDAD_TAREAS',
+  'TAREAS_REABIERTAS',
+  'ACTUALIZACION_TAREAS_DIA',
+];
+
+function dashboardKpiPlaceholder(kpiName) {
+  const categoryByName = {
+    CUMPLIMIENTO_SPRINT: 'DELIVERY',
+    TAREAS_COMPLETADAS_SPRINT: 'DELIVERY',
+    TRAZABILIDAD_TAREAS: 'QUALITY',
+    TAREAS_REABIERTAS: 'QUALITY',
+    ACTUALIZACION_TAREAS_DIA: 'ACTIVITY',
+  };
+  const unitByName = {
+    CUMPLIMIENTO_SPRINT: 'percent',
+    ACTUALIZACION_TAREAS_DIA: 'percent',
+    TAREAS_COMPLETADAS_SPRINT: 'count',
+    TRAZABILIDAD_TAREAS: 'count',
+    TAREAS_REABIERTAS: 'count',
+  };
+  return {
+    kpiValueId: null,
+    kpiName,
+    value: null,
+    unit: unitByName[kpiName] || 'count',
+    category: categoryByName[kpiName] || 'DELIVERY',
+  };
+}
+
+/** Un registro por kpiName: el más reciente según recordedAt (evita mezclar historial). */
+function latestKpiByNameMap(rows) {
+  const byName = new Map();
+  (rows || []).forEach((kv) => {
+    if (!kv || !kv.kpiName) return;
+    const prev = byName.get(kv.kpiName);
+    if (!prev) {
+      byName.set(kv.kpiName, kv);
+      return;
+    }
+    const pt = prev.recordedAt ? new Date(prev.recordedAt).getTime() : 0;
+    const ct = kv.recordedAt ? new Date(kv.recordedAt).getTime() : 0;
+    if (ct >= pt) byName.set(kv.kpiName, kv);
+  });
+  return byName;
+}
+
+/**
+ * Mezcla KPI de proyecto y de sprint. Gana el sprint si existe el mismo kpiName;
+ * si un KPI solo está guardado a nivel proyecto (p. ej. reabiertas), se sigue mostrando.
+ */
+function mergeSprintAndProjectKpiRows(sprintRows, projectRows) {
+  const projectByName = latestKpiByNameMap(projectRows);
+  const sprintByName = latestKpiByNameMap(sprintRows);
+  const merged = new Map(projectByName);
+  sprintByName.forEach((v, k) => merged.set(k, v));
+  return Array.from(merged.values());
+}
+
 const KPI_CATEGORY_LABELS = {
-  DELIVERY:    'Entrega',
-  QUALITY:     'Calidad',
-  ACTIVITY:    'Actividad',
-  DEVOPS:      'DevOps',
-  ENGAGEMENT:  'Engagement',
-  RELIABILITY: 'Confiabilidad',
-  INFRA:       'Infraestructura',
-  SECURITY:    'Seguridad',
+  DELIVERY: 'Entrega',
+  QUALITY: 'Calidad',
+  ACTIVITY: 'Actividad',
 };
 
 // ── Semicircular Gauge SVG ────────────────────────────────────────────────────
@@ -134,7 +183,7 @@ function KpiCard({ kpi, category }) {
       : '—';
 
   return (
-    <div className="kpi-card card">
+    <div className={`kpi-card card ${isPercent ? 'kpi-card--gauge' : 'kpi-card--stat'}`}>
       <div className="kpi-card__top">
         <span className="material-icons kpi-card__icon" style={{ color }}>
           {meta.icon}
@@ -149,7 +198,9 @@ function KpiCard({ kpi, category }) {
           </span>
         </div>
       ) : (
-        <div className="kpi-card__big-val" style={{ color }}>{displayVal}</div>
+        <div className="kpi-card__stat-block">
+          <div className="kpi-card__big-val" style={{ color }}>{displayVal}</div>
+        </div>
       )}
       <span className="kpi-card__category">{catLabel}</span>
     </div>
@@ -233,7 +284,9 @@ function NoData({ text }) {
 function Reports() {
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
-  const [activeSprint, setActiveSprint] = useState(null);
+  const [sprints, setSprints] = useState([]);
+  const [selectedSprintId, setSelectedSprintId] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   const [burndown, setBurndown]     = useState(null);
   const [velocity, setVelocity]     = useState(null);
   const [cumulative, setCumulative] = useState(null);
@@ -249,10 +302,12 @@ function Reports() {
   const projectId   = localStorage.getItem('currentProjectId');
   const projectName = localStorage.getItem('currentProjectName') || 'Proyecto';
 
-  // ── Data fetching ────────────────────────────────────────────────────────
+  // ── Data fetching: proyecto + lista de sprints ─────────────────────────────
   useEffect(() => {
     if (!projectId) {
       setLoading(false);
+      setSprints([]);
+      setSelectedSprintId(null);
       return;
     }
 
@@ -261,46 +316,37 @@ function Reports() {
 
     (async () => {
       try {
-        // 1. Get active sprint for this project
-        let active = null;
+        let sprintsList = [];
         try {
           const sprintRes = await apiFetch(
-            `/api/v1/sprints?project_id=${projectId}&status=ACTIVE&limit=1`
+            `sprints?project_id=${projectId}&page=1&limit=50`
           );
-          active = (sprintRes.data || [])[0] || null;
-          setActiveSprint(active);
+          sprintsList = sprintRes.data || [];
         } catch (_) {
-          // Sprint fetch failed — continue without active sprint
+          sprintsList = [];
         }
+        setSprints(sprintsList);
 
-        // 2. Parallel project-level fetches
-        const [vel, cum, comp, ms, kpis, devSp, hoursSp] = await Promise.allSettled([
-          apiFetch(`/api/v1/reports/sprint-velocity?project_id=${projectId}&last_n=6`),
-          apiFetch(`/api/v1/reports/cumulative-flow?project_id=${projectId}&weeks=7`),
-          apiFetch(`/api/v1/reports/task-completion?project_id=${projectId}`),
-          apiFetch(`/api/v1/reports/milestones?project_id=${projectId}`),
-          apiFetch(`/api/v1/kpi-values?project_id=${projectId}&limit=100`),
-          apiFetch(`/api/v1/reports/tasks-by-developer-sprint?project_id=${projectId}`),
-          apiFetch(`/api/v1/reports/hours-by-user-sprint?project_id=${projectId}`),
+        const active = sprintsList.find((s) => s.status === 'ACTIVE' || s.isActive) || null;
+        const defaultSprint = active || sprintsList[0] || null;
+        const defaultId = defaultSprint ? String(defaultSprint.sprintId) : null;
+        setSelectedSprintId(defaultId);
+
+        const [vel, cum, comp, ms, devSp, hoursSp] = await Promise.allSettled([
+          apiFetch(`reports/sprint-velocity?project_id=${projectId}&last_n=6`),
+          apiFetch(`reports/cumulative-flow?project_id=${projectId}&weeks=7`),
+          apiFetch(`reports/task-completion?project_id=${projectId}`),
+          apiFetch(`reports/milestones?project_id=${projectId}`),
+          apiFetch(`reports/tasks-by-developer-sprint?project_id=${projectId}`),
+          apiFetch(`reports/hours-by-user-sprint?project_id=${projectId}`),
         ]);
 
-        if (vel.status === 'fulfilled')    setVelocity(vel.value);
-        if (cum.status === 'fulfilled')    setCumulative(cum.value);
-        if (comp.status === 'fulfilled')   setCompletion(comp.value?.data || []);
-        if (ms.status === 'fulfilled')     setMilestones(ms.value?.milestones || []);
-        if (kpis.status === 'fulfilled')   setKpiValues(kpis.value?.data || []);
-        if (devSp.status === 'fulfilled')  setDevSprint(devSp.value);
+        if (vel.status === 'fulfilled') setVelocity(vel.value);
+        if (cum.status === 'fulfilled') setCumulative(cum.value);
+        if (comp.status === 'fulfilled') setCompletion(comp.value?.data || []);
+        if (ms.status === 'fulfilled') setMilestones(ms.value?.milestones || []);
+        if (devSp.status === 'fulfilled') setDevSprint(devSp.value);
         if (hoursSp.status === 'fulfilled') setHoursSprint(hoursSp.value);
-
-        // 3. Burndown — needs active sprint
-        if (active?.sprintId) {
-          try {
-            const bd = await apiFetch(
-              `/api/v1/reports/burndown?sprint_id=${active.sprintId}`
-            );
-            setBurndown(bd);
-          } catch (_) {/* no burndown */}
-        }
       } catch (err) {
         setError(err.message || 'Error al cargar los reportes.');
       } finally {
@@ -309,32 +355,113 @@ function Reports() {
     })();
   }, [projectId]);
 
+  // ── KPI del sprint elegido + burndown (insights según sprint) ───────────────
+  useEffect(() => {
+    if (!projectId || !selectedSprintId) {
+      setKpiValues([]);
+      setBurndown(null);
+      setInsightsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setInsightsLoading(true);
+    setKpiValues([]);
+    setBurndown(null);
+
+    (async () => {
+      try {
+        let sprintRows = [];
+        let projectRows = [];
+        const [sRes, pRes] = await Promise.allSettled([
+          apiFetch(
+            `kpi-values?scope_type=SPRINT&sprint_id=${selectedSprintId}&limit=100`
+          ),
+          apiFetch(`kpi-values?project_id=${projectId}&limit=100`),
+        ]);
+        if (sRes.status === 'fulfilled') sprintRows = sRes.value.data || [];
+        if (pRes.status === 'fulfilled') projectRows = pRes.value.data || [];
+
+        const rows = mergeSprintAndProjectKpiRows(sprintRows, projectRows);
+
+        let bd = null;
+        try {
+          bd = await apiFetch(`reports/burndown?sprint_id=${selectedSprintId}`);
+        } catch (_) {
+          bd = null;
+        }
+
+        if (!cancelled) {
+          setKpiValues(rows);
+          setBurndown(bd);
+        }
+      } catch (_) {
+        if (!cancelled) {
+          setKpiValues([]);
+          setBurndown(null);
+        }
+      } finally {
+        if (!cancelled) setInsightsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, selectedSprintId]);
+
+  const selectedSprint = useMemo(
+    () => sprints.find((s) => String(s.sprintId) === String(selectedSprintId)) || null,
+    [sprints, selectedSprintId]
+  );
+
+  const sprintLabel = useMemo(() => {
+    if (selectedSprint) {
+      if (selectedSprint.sprintNumber != null) {
+        return `Sprint ${selectedSprint.sprintNumber} — ${selectedSprint.name || ''}`.trim();
+      }
+      return selectedSprint.name || 'Sprint';
+    }
+    if (loading) return 'Cargando…';
+    return sprints.length === 0 ? 'Sin sprints' : 'Elige un sprint';
+  }, [selectedSprint, loading, sprints.length]);
+
+  const insightsBusy = loading || insightsLoading;
+
   // ── Export PDF (client-side — backend placeholder no genera PDF válido) ───
   const handleExport = () => {
     if (exporting) return;
     setExportError(null);
+    setExporting(true);
 
     try {
-      const sprintLabel = activeSprint?.name || 'Sin sprint activo';
+      const exportSprintTitle =
+        selectedSprint?.sprintNumber != null
+          ? `Sprint ${selectedSprint.sprintNumber} — ${selectedSprint.name || ''}`.trim()
+          : selectedSprint?.name || 'Sin sprint seleccionado';
       const date = new Date().toLocaleDateString('es-MX', { dateStyle: 'long' });
 
-      const kpiRows = kpiCategories
-        .flatMap((cat) =>
-          Object.values(kpiByCategory[cat]).map((kv) => {
-            const meta = KPI_META[kv.kpiName] || { label: kv.kpiName };
-            const catLabel = KPI_CATEGORY_LABELS[cat] || cat;
-            const val =
-              kv.value != null
-                ? kv.unit === 'percent'
-                  ? `${Math.round(kv.value)}%`
-                  : kv.unit === 'minutes'
-                  ? `${Math.round(kv.value)} min`
-                  : String(Math.round(kv.value))
-                : '—';
-            return `<tr><td>${catLabel}</td><td>${meta.label}</td><td><strong>${val}</strong></td></tr>`;
-          })
-        )
-        .join('');
+      const latestKpiByName = {};
+      kpiValues.forEach((kv) => {
+        if (!DASHBOARD_KPI_ORDER.includes(kv.kpiName)) return;
+        latestKpiByName[kv.kpiName] = kv;
+      });
+
+      const kpiRows = DASHBOARD_KPI_ORDER.map((name) => {
+        const kv = latestKpiByName[name] || dashboardKpiPlaceholder(name);
+        const meta = KPI_META[kv.kpiName] || { label: kv.kpiName };
+        const cat = kv.category || 'OTHER';
+        const catLabel = KPI_CATEGORY_LABELS[cat] || cat;
+        const val =
+          kv.value != null
+            ? kv.unit === 'percent'
+              ? `${Math.round(kv.value)}%`
+              : kv.unit === 'minutes'
+              ? `${Math.round(kv.value)} min`
+              : String(Math.round(kv.value))
+            : '—';
+        return `<tr><td>${catLabel}</td><td>${meta.label}</td><td><strong>${val}</strong></td></tr>`;
+      }).join('');
 
       const completionRows = completion
         .map(
@@ -364,7 +491,7 @@ function Reports() {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Reporte — ${sprintLabel}</title>
+  <title>Reporte — ${exportSprintTitle}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; color: #1e293b; padding: 36px; font-size: 13px; line-height: 1.5; }
@@ -386,7 +513,7 @@ function Reports() {
 </head>
 <body>
   <div class="report-title">Reporte de Rendimiento</div>
-  <div class="report-meta">${projectName} &nbsp;·&nbsp; ${sprintLabel} &nbsp;·&nbsp; Generado el ${date}</div>
+  <div class="report-meta">${projectName} &nbsp;·&nbsp; ${exportSprintTitle} &nbsp;·&nbsp; Generado el ${date}</div>
 
   ${kpiRows ? `<h2>KPIs del Proyecto</h2>
   <table>
@@ -420,6 +547,8 @@ function Reports() {
       setTimeout(() => win.print(), 300);
     } catch (_) {
       setExportError('No se pudo generar el reporte.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -541,18 +670,12 @@ function Reports() {
         }
       : null;
 
-  // ── KPI grouping: latest value per kpiName, grouped by category ───────────
-  const kpiByCategory = {};
+  // ── Dashboard KPI: último valor por nombre, solo las 5 tarjetas definidas ───
+  const latestByName = {};
   kpiValues.forEach((kv) => {
-    const cat = kv.category || 'OTHER';
-    if (!kpiByCategory[cat]) kpiByCategory[cat] = {};
-    // Overwrite — last in array wins (assume API returns ordered by time asc)
-    kpiByCategory[cat][kv.kpiName] = kv;
+    if (!DASHBOARD_KPI_ORDER.includes(kv.kpiName)) return;
+    latestByName[kv.kpiName] = kv;
   });
-  const kpiCategories = Object.keys(kpiByCategory);
-
-  // ── Derived labels ────────────────────────────────────────────────────────
-  const sprintLabel = activeSprint?.name || (loading ? 'Cargando…' : 'Sin sprint activo');
 
   // ── No project selected ───────────────────────────────────────────────────
   if (!projectId && !loading) {
@@ -581,17 +704,36 @@ function Reports() {
           </h2>
         </div>
         <div className="reports-header__actions">
-          <button className="btn btn--white">
-            <span className="material-icons" style={{ fontSize: 18 }}>
+          <div className="reports-sprint-select-wrap">
+            <span className="material-icons reports-sprint-select__icon" aria-hidden="true">
               calendar_today
             </span>
-            {sprintLabel}
-          </button>
+            <select
+              id="reports-sprint-select"
+              className="reports-sprint-select"
+              aria-label="Sprint para KPI y burndown"
+              value={selectedSprintId ?? ''}
+              onChange={(e) => setSelectedSprintId(e.target.value ? String(e.target.value) : null)}
+              disabled={loading || sprints.length === 0}
+            >
+              {sprints.length === 0 ? (
+                <option value="">{loading ? 'Cargando sprints…' : 'Sin sprints'}</option>
+              ) : (
+                sprints.map((s) => (
+                  <option key={s.sprintId} value={String(s.sprintId)}>
+                    {s.sprintNumber != null
+                      ? `Sprint ${s.sprintNumber} — ${s.name || ''}`.trim()
+                      : s.name || `Sprint ${s.sprintId}`}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
             <button
               className="btn btn--primary"
               onClick={handleExport}
-              disabled={loading || !projectId || exporting}
+              disabled={insightsBusy || !projectId || exporting}
             >
               <span className="material-icons" style={{ fontSize: 18 }}>
                 {exporting ? 'hourglass_empty' : 'file_download'}
@@ -622,28 +764,19 @@ function Reports() {
           <span className="text-sm text-muted">Métricas clave del proyecto</span>
         </div>
 
-        {loading ? (
+        {insightsBusy ? (
           <div className="kpi-grid mt-16">
-            {[...Array(8)].map((_, i) => (
+            {[...Array(5)].map((_, i) => (
               <Skeleton key={i} h={110} className="card" />
             ))}
           </div>
-        ) : kpiCategories.length === 0 ? (
-          <div className="kpi-empty mt-16">
-            <span className="material-icons" style={{ fontSize: 28, opacity: 0.3 }}>
-              analytics
-            </span>
-            <span className="text-sm text-muted">
-              No hay valores KPI registrados para este proyecto.
-            </span>
-          </div>
         ) : (
           <div className="kpi-grid mt-16">
-            {kpiCategories.flatMap((cat) =>
-              Object.values(kpiByCategory[cat]).map((kv) => (
-                <KpiCard key={kv.kpiValueId} kpi={kv} category={cat} />
-              ))
-            )}
+            {DASHBOARD_KPI_ORDER.map((name) => {
+              const kv = latestByName[name] || dashboardKpiPlaceholder(name);
+              const cat = kv.category || 'OTHER';
+              return <KpiCard key={name} kpi={kv} category={cat} />;
+            })}
           </div>
         )}
       </section>
@@ -660,7 +793,7 @@ function Reports() {
               <span className="text-sm text-muted">
                 {burndown
                   ? burndown.sprint_name
-                  : activeSprint?.name || 'Sprint activo'}
+                  : selectedSprint?.name || sprintLabel}
               </span>
             </div>
             {burndown && (
@@ -674,7 +807,7 @@ function Reports() {
             )}
           </div>
 
-          {loading ? (
+          {insightsBusy ? (
             <Skeleton h={210} />
           ) : burndownChartData ? (
             <ChartBox
@@ -693,7 +826,7 @@ function Reports() {
               }}
             />
           ) : (
-            <NoData text="Sin datos de burndown para el sprint activo" />
+            <NoData text="Sin datos de burndown para este sprint" />
           )}
         </div>
 

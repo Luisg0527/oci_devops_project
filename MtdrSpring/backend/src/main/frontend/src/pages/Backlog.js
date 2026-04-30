@@ -1,13 +1,39 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import PageLayout from '../components/layout/PageLayout';
 import PriorityBadge from '../components/common/PriorityBadge';
 import StatusBadge from '../components/common/StatusBadge';
-import { teamMembers } from '../data/mockData';
+import { API_BASE } from '../config/apiBase';
 import './Backlog.css';
 
 const ITEMS_PER_PAGE = 5;
 const PRIORITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-const API_BASE = '/api/v1';
+
+/** Normaliza TaskResponse del API al estado de la tabla */
+function mapTaskFromApi(task) {
+  let due = task.dueDate;
+  if (due && typeof due === 'string' && due.includes('T')) {
+    due = due.split('T')[0];
+  }
+  return {
+    taskId: task.taskId,
+    title: task.title || 'Sin titulo',
+    priority: task.priority || 'MEDIUM',
+    status: task.status || 'PENDING',
+    sprintId: task.sprintId ?? null,
+    assignedTo: task.assignedTo ?? null,
+    assignedToName: task.assigneeName || 'Sin asignar',
+    dueDate: due || '',
+    taskStage: task.taskStage || 'BACKLOG',
+  };
+}
+
+function authJsonHeaders() {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 const TASK_STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Pendiente' },
@@ -27,12 +53,6 @@ const SPRINT_STATUS_OPTIONS = [
   { value: 'CLOSED', label: 'Cerrado' },
 ];
 
-function taskStageForStatus(status) {
-  if (status === 'DONE') return 'COMPLETED';
-  if (status === 'IN_PROGRESS') return 'SPRINT';
-  return 'BACKLOG';
-}
-
 function parseDateStr(str) {
   if (!str) return Infinity;
   const d = new Date(str);
@@ -51,11 +71,80 @@ function Backlog() {
   const [newSprint, setNewSprint] = useState({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
   const [sprintError, setSprintError] = useState('');
   const [sprints, setSprints] = useState([]);
-  const [selectedSprintId, setSelectedSprintId] = useState('BACKLOG');
+  /** ALL = sin filtrar por sprint; BACKLOG = solo tareas en backlog; id numérico = ese sprint */
+  const [selectedSprintId, setSelectedSprintId] = useState('ALL');
+  /** Solo la primera vez que llegan sprints: fija filtro al sprint activo (si existe). */
+  const defaultActiveSprintAppliedRef = useRef(false);
   const [sortBy, setSortBy] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [taskActionError, setTaskActionError] = useState('');
+  /** Usuarios reales del equipo (mismo criterio que Team Management) */
+  const [assignableUsers, setAssignableUsers] = useState([]);
+
+  const loadAssignableUsers = useCallback(async () => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setAssignableUsers([]);
+      return;
+    }
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      let teamId = localStorage.getItem('userTeamId');
+      if (!teamId) {
+        const res = await fetch(`${API_BASE}/teams`, { headers });
+        if (res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const teams = Array.isArray(body.data) ? body.data : [];
+          if (teams.length === 1) {
+            teamId = String(teams[0].teamId);
+            localStorage.setItem('userTeamId', teamId);
+          }
+        }
+      }
+      if (!teamId) {
+        setAssignableUsers([]);
+        return;
+      }
+      const usersRes = await fetch(
+        `${API_BASE}/users?teamId=${encodeURIComponent(teamId)}&page=1&limit=200`,
+        { headers }
+      );
+      if (usersRes.status === 401) {
+        localStorage.removeItem('authToken');
+        window.location.assign('/login');
+        return;
+      }
+      const usersBody = await usersRes.json().catch(() => ({}));
+      if (!usersRes.ok) {
+        setAssignableUsers([]);
+        return;
+      }
+      const rows = Array.isArray(usersBody.data) ? usersBody.data : [];
+      setAssignableUsers(
+        rows.map((u) => ({
+          userId: u.userId,
+          fullName: u.fullName || u.username || `Usuario ${u.userId}`,
+        }))
+      );
+    } catch {
+      setAssignableUsers([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      loadAssignableUsers();
+    }
+  }, [loadAssignableUsers]);
+
+  useEffect(() => {
+    if (showNewTask) {
+      loadAssignableUsers();
+    }
+  }, [showNewTask, loadAssignableUsers]);
 
   useEffect(() => {
     const projectId = localStorage.getItem('currentProjectId');
@@ -82,11 +171,22 @@ function Backlog() {
         }
         const loadedSprints = Array.isArray(sprintPayload.data) ? sprintPayload.data : [];
         setSprints(loadedSprints);
-        if (
+
+        const activeSprint = loadedSprints.find((s) => s.isActive || s.status === 'ACTIVE') || null;
+
+        if (!defaultActiveSprintAppliedRef.current) {
+          defaultActiveSprintAppliedRef.current = true;
+          if (activeSprint) {
+            setSelectedSprintId(String(activeSprint.sprintId));
+          } else {
+            setSelectedSprintId('ALL');
+          }
+        } else if (
           selectedSprintId !== 'BACKLOG' &&
+          selectedSprintId !== 'ALL' &&
           !loadedSprints.some((sprint) => String(sprint.sprintId) === String(selectedSprintId))
         ) {
-          setSelectedSprintId('BACKLOG');
+          setSelectedSprintId(activeSprint ? String(activeSprint.sprintId) : 'ALL');
         }
       } catch (err) {
         setLoadError(err.message || 'No fue posible cargar sprints.');
@@ -115,7 +215,7 @@ function Backlog() {
         });
         if (selectedSprintId === 'BACKLOG') {
           params.set('task_stage', 'BACKLOG');
-        } else {
+        } else if (selectedSprintId !== 'ALL') {
           params.set('sprint_id', selectedSprintId);
         }
 
@@ -129,17 +229,7 @@ function Backlog() {
           throw new Error(payload.error || 'No fue posible cargar tareas.');
         }
 
-        const normalized = (payload.data || []).map((task) => ({
-          taskId: task.taskId,
-          title: task.title || 'Sin titulo',
-          priority: task.priority || 'MEDIUM',
-          status: task.status || 'PENDING',
-          sprintId: task.sprintId ?? null,
-          assignedTo: task.assignedTo || null,
-          assignedToName: task.assigneeName || 'Sin asignar',
-          dueDate: task.dueDate || '',
-          taskStage: task.taskStage || 'BACKLOG',
-        }));
+        const normalized = (payload.data || []).map(mapTaskFromApi);
         setTasks(normalized);
       } catch (err) {
         setLoadError(err.message || 'No fue posible cargar tareas.');
@@ -211,38 +301,75 @@ function Backlog() {
     return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const handleAddTask = (e) => {
+  const handleAddTask = async (e) => {
     e.preventDefault();
     const missing = [];
     if (!newTask.title.trim()) missing.push('Título');
-    if (!newTask.assignedTo) missing.push('Responsable');
     if (!newTask.dueDate) missing.push('Fecha límite');
     if (missing.length > 0) {
       setFormError(`Campos requeridos: ${missing.join(', ')}`);
       return;
     }
-    setFormError('');
+    const projectId = localStorage.getItem('currentProjectId');
+    const creatorId = localStorage.getItem('userId');
+    if (!projectId) {
+      setFormError('Selecciona un proyecto en la barra superior.');
+      return;
+    }
+    if (!creatorId) {
+      setFormError('Vuelve a iniciar sesión para crear tareas.');
+      return;
+    }
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setFormError('Inicia sesión para crear tareas.');
+      return;
+    }
+
     const assignedUserId = Number(newTask.assignedTo);
-    const member = teamMembers.find(m => m.userId === assignedUserId);
-    const task = {
-      taskId: Date.now(),
-      projectId: null,
-      sprintId: null,
-      title: newTask.title,
+    const sprintNumeric =
+      selectedSprintId !== 'ALL' &&
+      selectedSprintId !== 'BACKLOG' &&
+      selectedSprintId !== ''
+        ? Number(selectedSprintId)
+        : null;
+    const body = {
+      projectId: Number(projectId),
+      title: newTask.title.trim(),
       description: '',
-      taskStage: 'BACKLOG',
-      status: 'PENDING',
       priority: newTask.priority,
-      createdBy: 7,
-      assignedTo: assignedUserId,
-      assignedToName: member ? member.fullName : 'Sin asignar',
+      status: 'PENDING',
+      taskStage: sprintNumeric ? 'SPRINT' : 'BACKLOG',
+      createdBy: Number(creatorId),
       dueDate: newTask.dueDate,
-      createdAt: new Date().toISOString(),
     };
-    setTasks(prev => [task, ...prev]);
-    setNewTask({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
-    setShowNewTask(false);
-    setPage(1);
+    if (sprintNumeric) {
+      body.sprintId = sprintNumeric;
+    }
+    if (!Number.isNaN(assignedUserId) && newTask.assignedTo) {
+      body.assignedTo = assignedUserId;
+    }
+
+    setFormError('');
+    try {
+      const response = await fetch(`${API_BASE}/tasks`, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible crear la tarea.');
+      }
+      const normalized = mapTaskFromApi(payload);
+      setTasks((prev) => [normalized, ...prev]);
+      setNewTask({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
+      setShowNewTask(false);
+      setPage(1);
+      setTaskActionError('');
+    } catch (err) {
+      setFormError(err.message || 'No fue posible crear la tarea.');
+    }
   };
 
   const handleAddSprint = async (event) => {
@@ -296,23 +423,74 @@ function Backlog() {
     }
   };
 
-  const handleDeleteTask = (taskId) => {
-    setTasks(prev => prev.filter(t => t.taskId !== taskId));
+  const handleDeleteTask = async (taskId) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setTaskActionError('Inicia sesión para eliminar tareas.');
+      return;
+    }
+    try {
+      setTaskActionError('');
+      const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: authJsonHeaders(),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || payload.message || 'No fue posible eliminar la tarea.');
+      }
+      setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+    } catch (err) {
+      setTaskActionError(err.message || 'No fue posible eliminar la tarea.');
+    }
   };
 
-  const handleStatusChange = (taskId, newStatus) => {
-    setTasks(prev => prev.map(t =>
-      t.taskId === taskId
-        ? { ...t, status: newStatus, taskStage: taskStageForStatus(newStatus) }
-        : t
-    ));
+  const handleStatusChange = async (taskId, newStatus) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setTaskActionError('Inicia sesión para actualizar tareas.');
+      return;
+    }
+    try {
+      setTaskActionError('');
+      const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible actualizar el estado.');
+      }
+      const normalized = mapTaskFromApi(payload);
+      setTasks((prev) => prev.map((t) => (t.taskId === taskId ? normalized : t)));
+    } catch (err) {
+      setTaskActionError(err.message || 'No fue posible actualizar el estado.');
+    }
   };
-  const handlePriorityChange = (taskId, newPriority) => {
-    setTasks(prev => prev.map(t =>
-      t.taskId === taskId
-        ? { ...t, priority: newPriority }
-        : t
-    ));
+
+  const handlePriorityChange = async (taskId, newPriority) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setTaskActionError('Inicia sesión para actualizar tareas.');
+      return;
+    }
+    try {
+      setTaskActionError('');
+      const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ priority: newPriority }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible actualizar la prioridad.');
+      }
+      const normalized = mapTaskFromApi(payload);
+      setTasks((prev) => prev.map((t) => (t.taskId === taskId ? normalized : t)));
+    } catch (err) {
+      setTaskActionError(err.message || 'No fue posible actualizar la prioridad.');
+    }
   };
 
   const overdueCount = tasks.filter(t => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
@@ -362,6 +540,12 @@ function Backlog() {
       {loadError && (
         <div className="card mt-16" style={{ padding: 12, color: '#b42318' }}>
           {loadError}
+        </div>
+      )}
+
+      {taskActionError && (
+        <div className="card mt-16" style={{ padding: 12, color: '#b42318' }}>
+          {taskActionError}
         </div>
       )}
 
@@ -440,10 +624,15 @@ function Backlog() {
             onChange={e => setNewTask(p => ({ ...p, assignedTo: e.target.value }))}
           >
             <option value="">Sin asignar</option>
-            {teamMembers.map(m => (
+            {assignableUsers.map((m) => (
               <option key={m.userId} value={m.userId}>{m.fullName}</option>
             ))}
           </select>
+          {showNewTask && assignableUsers.length === 0 && (
+            <span className="text-sm text-muted" style={{ alignSelf: 'center', whiteSpace: 'nowrap' }}>
+              Sin usuarios del equipo: revisa Gestión de equipo o tu asignación a un equipo.
+            </span>
+          )}
           <input
             type="date"
             className="backlog-input backlog-input--sm"
@@ -492,7 +681,11 @@ function Backlog() {
             )}
             {!isLoading && paginated.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-sm text-muted">No hay tareas en backlog.</td>
+                <td colSpan={6} className="text-sm text-muted">
+                  {selectedSprintId === 'BACKLOG'
+                    ? 'No hay tareas en backlog.'
+                    : 'No hay tareas que coincidan con el filtro.'}
+                </td>
               </tr>
             )}
             {paginated.map(task => (
@@ -587,21 +780,42 @@ function Backlog() {
           <span className="backlog-sprint-board__kicker">Sprint actual</span>
           <button
             type="button"
-            className={`backlog-sprint-board__main ${selectedSprintId === (activeSprint ? String(activeSprint.sprintId) : 'BACKLOG') ? 'is-active' : ''}`}
+            className={`backlog-sprint-board__main ${(
+              selectedSprintId === 'ALL' ||
+              selectedSprintId === 'BACKLOG' ||
+              (activeSprint && selectedSprintId === String(activeSprint.sprintId))
+            ) ? 'is-active' : ''}`}
             onClick={() => {
-              if (!activeSprint || selectedSprintId === String(activeSprint.sprintId)) {
+              if (!activeSprint) {
+                setSelectedSprintId((prev) => (prev === 'BACKLOG' ? 'ALL' : 'BACKLOG'));
+                return;
+              }
+              const activeId = String(activeSprint.sprintId);
+              if (selectedSprintId === 'ALL') {
+                setSelectedSprintId(activeId);
+              } else if (selectedSprintId === activeId) {
                 setSelectedSprintId('BACKLOG');
+              } else if (selectedSprintId === 'BACKLOG') {
+                setSelectedSprintId('ALL');
               } else {
-                setSelectedSprintId(String(activeSprint.sprintId));
+                setSelectedSprintId(activeId);
               }
             }}
           >
             <h3>{sprintTitle(activeSprint)}</h3>
-              {selectedSprintId === (activeSprint ? String(activeSprint.sprintId) : 'BACKLOG') && (
+              {(selectedSprintId === 'BACKLOG' ||
+                (activeSprint && selectedSprintId === String(activeSprint.sprintId))) && (
                 <span className="backlog-sprint-board__active-pill">Filtrando</span>
               )}
+              {selectedSprintId === 'ALL' && (
+                <span className="backlog-sprint-board__active-pill">Todas las tareas</span>
+              )}
             <p className="backlog-sprint-board__status">
-              {activeSprint ? sprintStatusLabel(activeSprint.status) : 'Mostrando tareas en backlog'}
+              {activeSprint
+                ? sprintStatusLabel(activeSprint.status)
+                : selectedSprintId === 'ALL'
+                  ? 'Sin filtro de sprint'
+                  : 'Mostrando tareas en backlog'}
             </p>
           </button>
           <div className="backlog-sprint-board__progress-wrap">
