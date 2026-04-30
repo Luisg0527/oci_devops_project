@@ -49,3 +49,9 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 /MtdrSpring/backend/wallet
+# Claude Code local settings
+.claude/
+
+# Logs
+*.log
+*.log.*.gz

@@ -112,8 +112,9 @@ function GaugeChart({ value, color }) {
 }
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ kpi }) {
+function KpiCard({ kpi, category }) {
   const meta = KPI_META[kpi.kpiName] || { label: kpi.kpiName, icon: 'analytics' };
+  const catLabel = KPI_CATEGORY_LABELS[category] || category;
   const isPercent = kpi.unit === 'percent';
   const isMinutes = kpi.unit === 'minutes';
   const numVal = kpi.value != null ? Number(kpi.value) : null;
@@ -150,6 +151,7 @@ function KpiCard({ kpi }) {
       ) : (
         <div className="kpi-card__big-val" style={{ color }}>{displayVal}</div>
       )}
+      <span className="kpi-card__category">{catLabel}</span>
     </div>
   );
 }
@@ -239,6 +241,8 @@ function Reports() {
   const [milestones, setMilestones] = useState([]);
   const [kpiValues, setKpiValues]   = useState([]);
   const [velocityView, setVelocityView] = useState('recent');
+  const [exporting, setExporting]       = useState(false);
+  const [exportError, setExportError]   = useState(null);
 
   const projectId   = localStorage.getItem('currentProjectId');
   const projectName = localStorage.getItem('currentProjectName') || 'Proyecto';
@@ -299,24 +303,118 @@ function Reports() {
     })();
   }, [projectId]);
 
-  // ── Export PDF ────────────────────────────────────────────────────────────
-  const handleExport = async () => {
-    if (!activeSprint?.sprintId) return;
-    const token = getToken();
+  // ── Export PDF (client-side — backend placeholder no genera PDF válido) ───
+  const handleExport = () => {
+    if (exporting) return;
+    setExportError(null);
+
     try {
-      const res = await fetch(
-        `${API_BASE}/api/v1/reports/export?sprint_id=${activeSprint.sprintId}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-      );
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `sprint_${activeSprint.sprintId}_report.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (_) {/* silent */}
+      const sprintLabel = activeSprint?.name || 'Sin sprint activo';
+      const date = new Date().toLocaleDateString('es-MX', { dateStyle: 'long' });
+
+      const kpiRows = kpiCategories
+        .flatMap((cat) =>
+          Object.values(kpiByCategory[cat]).map((kv) => {
+            const meta = KPI_META[kv.kpiName] || { label: kv.kpiName };
+            const catLabel = KPI_CATEGORY_LABELS[cat] || cat;
+            const val =
+              kv.value != null
+                ? kv.unit === 'percent'
+                  ? `${Math.round(kv.value)}%`
+                  : kv.unit === 'minutes'
+                  ? `${Math.round(kv.value)} min`
+                  : String(Math.round(kv.value))
+                : '—';
+            return `<tr><td>${catLabel}</td><td>${meta.label}</td><td><strong>${val}</strong></td></tr>`;
+          })
+        )
+        .join('');
+
+      const completionRows = completion
+        .map(
+          (row) => `<tr>
+            <td>${row.full_name}</td>
+            <td>${row.role || '—'}</td>
+            <td>${row.assigned}</td>
+            <td>${row.completed}</td>
+            <td>${row.efficiency_percent}%</td>
+          </tr>`
+        )
+        .join('');
+
+      const milestoneRows = milestones
+        .map((m) => {
+          const status =
+            m.status === 'COMPLETED'
+              ? 'Completado'
+              : m.is_current
+              ? 'Activo'
+              : 'Pendiente';
+          return `<tr><td>${m.name}</td><td>${m.date || '—'}</td><td>${status}</td></tr>`;
+        })
+        .join('');
+
+      const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte — ${sprintLabel}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #1e293b; padding: 36px; font-size: 13px; line-height: 1.5; }
+    .report-title { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+    .report-meta { color: #64748b; font-size: 12px; margin-bottom: 32px; }
+    h2 { font-size: 14px; font-weight: 700; margin: 28px 0 8px; color: #4F46E5;
+         border-bottom: 2px solid #4F46E5; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f1f5f9; text-align: left; padding: 8px 12px;
+         font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; }
+    td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
+    tr:last-child td { border-bottom: none; }
+    @media print {
+      body { padding: 16px; }
+      h2 { break-before: avoid; }
+      table { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="report-title">Reporte de Rendimiento</div>
+  <div class="report-meta">${projectName} &nbsp;·&nbsp; ${sprintLabel} &nbsp;·&nbsp; Generado el ${date}</div>
+
+  ${kpiRows ? `<h2>KPIs del Proyecto</h2>
+  <table>
+    <thead><tr><th>Categoría</th><th>KPI</th><th>Valor</th></tr></thead>
+    <tbody>${kpiRows}</tbody>
+  </table>` : ''}
+
+  ${completionRows ? `<h2>Completado por Miembro</h2>
+  <table>
+    <thead><tr><th>Miembro</th><th>Rol</th><th>Asignadas</th><th>Completadas</th><th>Eficiencia</th></tr></thead>
+    <tbody>${completionRows}</tbody>
+  </table>` : ''}
+
+  ${milestoneRows ? `<h2>Milestones</h2>
+  <table>
+    <thead><tr><th>Sprint</th><th>Fecha</th><th>Estado</th></tr></thead>
+    <tbody>${milestoneRows}</tbody>
+  </table>` : ''}
+</body>
+</html>`;
+
+      const win = window.open('', '_blank');
+      if (!win) {
+        setExportError('Popup bloqueado — permite ventanas emergentes para este sitio.');
+        return;
+      }
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      // Small delay so the browser renders before print dialog opens
+      setTimeout(() => win.print(), 300);
+    } catch (_) {
+      setExportError('No se pudo generar el reporte.');
+    }
   };
 
   // ── Chart data builders ───────────────────────────────────────────────────
@@ -449,16 +547,21 @@ function Reports() {
             </span>
             {sprintLabel}
           </button>
-          <button
-            className="btn btn--primary"
-            onClick={handleExport}
-            disabled={!activeSprint?.sprintId}
-          >
-            <span className="material-icons" style={{ fontSize: 18 }}>
-              file_download
-            </span>
-            Exportar PDF
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <button
+              className="btn btn--primary"
+              onClick={handleExport}
+              disabled={loading || !projectId || exporting}
+            >
+              <span className="material-icons" style={{ fontSize: 18 }}>
+                {exporting ? 'hourglass_empty' : 'file_download'}
+              </span>
+              {exporting ? 'Exportando…' : 'Exportar PDF'}
+            </button>
+            {exportError && (
+              <span style={{ fontSize: 12, color: '#EF4444' }}>{exportError}</span>
+            )}
+          </div>
         </div>
       </section>
 
@@ -481,8 +584,8 @@ function Reports() {
 
         {loading ? (
           <div className="kpi-grid mt-16">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} h={140} className="card" />
+            {[...Array(8)].map((_, i) => (
+              <Skeleton key={i} h={110} className="card" />
             ))}
           </div>
         ) : kpiCategories.length === 0 ? (
@@ -495,18 +598,13 @@ function Reports() {
             </span>
           </div>
         ) : (
-          kpiCategories.map((cat) => (
-            <div key={cat} className="kpi-category-block mt-16">
-              <span className="kpi-category-label">
-                {KPI_CATEGORY_LABELS[cat] || cat}
-              </span>
-              <div className="kpi-grid mt-8">
-                {Object.values(kpiByCategory[cat]).map((kv) => (
-                  <KpiCard key={kv.kpiValueId} kpi={kv} />
-                ))}
-              </div>
-            </div>
-          ))
+          <div className="kpi-grid mt-16">
+            {kpiCategories.flatMap((cat) =>
+              Object.values(kpiByCategory[cat]).map((kv) => (
+                <KpiCard key={kv.kpiValueId} kpi={kv} category={cat} />
+              ))
+            )}
+          </div>
         )}
       </section>
 
