@@ -43,6 +43,7 @@ function TeamManagement() {
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
 
   const loadData = useCallback(async () => {
     const token = localStorage.getItem('authToken');
@@ -238,12 +239,7 @@ function TeamManagement() {
   };
 
   const handleViewMember = (member) => {
-    const bits = [
-      member.fullName,
-      member.email ? `Correo: ${member.email}` : null,
-      member.status ? `Estado: ${member.status}` : null,
-    ].filter(Boolean);
-    window.alert(bits.join('\n'));
+    setSelectedMember(member);
   };
 
   if (loading) {
@@ -411,6 +407,79 @@ function TeamManagement() {
 
       {!noTeam && !members.length && !error && (
         <p className="section-subtitle mt-24">No hay miembros en este equipo.</p>
+      )}
+
+      {selectedMember && (
+        <div className="member-modal-overlay" onClick={() => setSelectedMember(null)}>
+          <div className="member-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="member-modal__close"
+              onClick={() => setSelectedMember(null)}
+            >
+              <span className="material-icons">close</span>
+            </button>
+
+            <div className="member-modal__avatar">
+              {(selectedMember.fullName || '?')
+                .split(' ')
+                .filter(Boolean)
+                .map((n) => n[0])
+                .join('')
+                .slice(0, 3)}
+            </div>
+
+            <h3 className="member-modal__name">{selectedMember.fullName}</h3>
+            <span className="member-modal__role-badge">{selectedMember.roleName || 'Sin rol'}</span>
+
+            <div className="member-modal__details">
+              {selectedMember.email && (
+                <div className="member-modal__row">
+                  <span className="material-icons member-modal__icon">email</span>
+                  <div>
+                    <span className="member-modal__label">Correo</span>
+                    <span className="member-modal__value">{selectedMember.email}</span>
+                  </div>
+                </div>
+              )}
+              {selectedMember.status && (
+                <div className="member-modal__row">
+                  <span className="material-icons member-modal__icon">circle</span>
+                  <div>
+                    <span className="member-modal__label">Estado</span>
+                    <span className="member-modal__value">{selectedMember.status}</span>
+                  </div>
+                </div>
+              )}
+              <div className="member-modal__row">
+                <span className="material-icons member-modal__icon">speed</span>
+                <div style={{ width: '100%' }}>
+                  <span className="member-modal__label">Carga de trabajo</span>
+                  <div className="member-modal__workload-bar-wrap">
+                    <div
+                      className="member-modal__workload-bar"
+                      style={{
+                        width: `${selectedMember.workload || 0}%`,
+                        background:
+                          (selectedMember.workload || 0) >= 80
+                            ? 'var(--color-red)'
+                            : (selectedMember.workload || 0) >= 60
+                            ? 'var(--color-gold)'
+                            : 'var(--color-teal)',
+                      }}
+                    />
+                  </div>
+                  <span className="member-modal__workload-label">
+                    {selectedMember.workload || 0}% utilización
+                    {(selectedMember.workload || 0) === 0 && ' · Sin tareas activas'}
+                    {(selectedMember.workload || 0) >= 60 && (selectedMember.workload || 0) < 80 && ' · Carga media'}
+                    {(selectedMember.workload || 0) >= 80 && ' · Carga alta'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </PageLayout>
   );
