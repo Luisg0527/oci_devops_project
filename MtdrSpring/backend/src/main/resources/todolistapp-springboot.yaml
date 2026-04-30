@@ -70,6 +70,12 @@ spec:
                   name: frontendadmin
                   key: password
                   optional: true
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: groq-api
+                  key: apikey
+                  optional: true
           volumeMounts:
             - name: creds
               mountPath: /mtdrworkshop/creds

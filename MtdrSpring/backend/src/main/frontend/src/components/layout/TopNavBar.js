@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE } from '../../config/apiBase';
+import ChatWidget from '../common/ChatWidget';
 import './TopNavBar.css';
 
 function TopNavBar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [projects, setProjects] = useState([]);
   const [currentProjectId, setCurrentProjectId] = useState(localStorage.getItem('currentProjectId') || '');
   const [currentProjectName, setCurrentProjectName] = useState(localStorage.getItem('currentProjectName') || 'Selecciona proyecto');
@@ -153,7 +155,13 @@ function TopNavBar() {
         <button className="topnav__icon-btn">
           <span className="material-icons">notifications_none</span>
         </button>
-        <button className="topnav__icon-btn">
+        <button
+          type="button"
+          className={`topnav__icon-btn ${isChatOpen ? 'topnav__icon-btn--active' : ''}`}
+          onClick={() => setIsChatOpen((prev) => !prev)}
+          aria-label={isChatOpen ? 'Cerrar asistente' : 'Abrir asistente Sprintly'}
+          aria-expanded={isChatOpen}
+        >
           <span className="material-icons">chat_bubble_outline</span>
         </button>
         <div className="topnav__divider" />
@@ -180,6 +188,8 @@ function TopNavBar() {
           )}
         </div>
       </div>
+
+      <ChatWidget open={isChatOpen} onClose={() => setIsChatOpen(false)} />
     </header>
   );
 }
