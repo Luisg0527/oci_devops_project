@@ -196,6 +196,93 @@ public class ReportController {
         ));
     }
 
+    @GetMapping("/tasks-by-developer-sprint")
+    public ResponseEntity<?> getTasksByDeveloperSprint(@RequestParam("project_id") Long projectId) {
+
+        List<ProjectSprint> sorted = projectService.findSprints(projectId).stream()
+                .sorted(Comparator.comparingInt(ProjectSprint::getSprintNumber))
+                .collect(Collectors.toList());
+
+        List<String> sprintLabels = sorted.stream()
+                .map(ps -> ps.getSprint().getName())
+                .collect(Collectors.toList());
+
+        Map<Long, int[]> countsByUser = new LinkedHashMap<>();
+        Map<Long, String> userNames = new LinkedHashMap<>();
+
+        for (int i = 0; i < sorted.size(); i++) {
+            final int idx = i;
+            List<Task> tasks = taskService.findBySprint(sorted.get(i).getSprint().getSprintId());
+            tasks.stream()
+                    .filter(t -> t.getAssignedTo() != null && t.getStatus() == Task.Status.DONE)
+                    .forEach(t -> {
+                        Long uid = t.getAssignedTo().getUserId();
+                        userNames.put(uid, t.getAssignedTo().getFullName());
+                        countsByUser.computeIfAbsent(uid, k -> new int[sorted.size()])[idx]++;
+                    });
+        }
+
+        List<Map<String, Object>> developers = countsByUser.entrySet().stream()
+                .map(e -> {
+                    List<Integer> data = new ArrayList<>();
+                    for (int c : e.getValue()) data.add(c);
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("name", userNames.get(e.getKey()));
+                    m.put("data", data);
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("sprints", sprintLabels);
+        response.put("developers", developers);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/hours-by-user-sprint")
+    public ResponseEntity<?> getHoursByUserSprint(@RequestParam("project_id") Long projectId) {
+
+        List<ProjectSprint> sorted = projectService.findSprints(projectId).stream()
+                .sorted(Comparator.comparingInt(ProjectSprint::getSprintNumber))
+                .collect(Collectors.toList());
+
+        List<String> sprintLabels = sorted.stream()
+                .map(ps -> ps.getSprint().getName())
+                .collect(Collectors.toList());
+
+        Map<Long, double[]> hoursByUser = new LinkedHashMap<>();
+        Map<Long, String> userNames = new LinkedHashMap<>();
+
+        for (int i = 0; i < sorted.size(); i++) {
+            final int idx = i;
+            List<Task> tasks = taskService.findBySprint(sorted.get(i).getSprint().getSprintId());
+            tasks.stream()
+                    .filter(t -> t.getAssignedTo() != null && t.getActualHours() != null)
+                    .forEach(t -> {
+                        Long uid = t.getAssignedTo().getUserId();
+                        userNames.put(uid, t.getAssignedTo().getFullName());
+                        hoursByUser.computeIfAbsent(uid, k -> new double[sorted.size()])[idx]
+                                += t.getActualHours().doubleValue();
+                    });
+        }
+
+        List<Map<String, Object>> users = hoursByUser.entrySet().stream()
+                .map(e -> {
+                    List<Double> data = new ArrayList<>();
+                    for (double h : e.getValue()) data.add(Math.round(h * 10.0) / 10.0);
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("name", userNames.get(e.getKey()));
+                    m.put("data", data);
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("sprints", sprintLabels);
+        response.put("users", users);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/export")
     public ResponseEntity<byte[]> exportPdf(@RequestParam("sprint_id") Long sprintId) {
         Sprint sprint = sprintService.findById(sprintId)

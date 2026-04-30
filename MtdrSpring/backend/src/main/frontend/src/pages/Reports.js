@@ -243,6 +243,8 @@ function Reports() {
   const [velocityView, setVelocityView] = useState('recent');
   const [exporting, setExporting]       = useState(false);
   const [exportError, setExportError]   = useState(null);
+  const [devSprint, setDevSprint]       = useState(null);
+  const [hoursSprint, setHoursSprint]   = useState(null);
 
   const projectId   = localStorage.getItem('currentProjectId');
   const projectName = localStorage.getItem('currentProjectName') || 'Proyecto';
@@ -272,19 +274,23 @@ function Reports() {
         }
 
         // 2. Parallel project-level fetches
-        const [vel, cum, comp, ms, kpis] = await Promise.allSettled([
+        const [vel, cum, comp, ms, kpis, devSp, hoursSp] = await Promise.allSettled([
           apiFetch(`/api/v1/reports/sprint-velocity?project_id=${projectId}&last_n=6`),
           apiFetch(`/api/v1/reports/cumulative-flow?project_id=${projectId}&weeks=7`),
           apiFetch(`/api/v1/reports/task-completion?project_id=${projectId}`),
           apiFetch(`/api/v1/reports/milestones?project_id=${projectId}`),
           apiFetch(`/api/v1/kpi-values?project_id=${projectId}&limit=100`),
+          apiFetch(`/api/v1/reports/tasks-by-developer-sprint?project_id=${projectId}`),
+          apiFetch(`/api/v1/reports/hours-by-user-sprint?project_id=${projectId}`),
         ]);
 
-        if (vel.status === 'fulfilled')  setVelocity(vel.value);
-        if (cum.status === 'fulfilled')  setCumulative(cum.value);
-        if (comp.status === 'fulfilled') setCompletion(comp.value?.data || []);
-        if (ms.status === 'fulfilled')   setMilestones(ms.value?.milestones || []);
-        if (kpis.status === 'fulfilled') setKpiValues(kpis.value?.data || []);
+        if (vel.status === 'fulfilled')    setVelocity(vel.value);
+        if (cum.status === 'fulfilled')    setCumulative(cum.value);
+        if (comp.status === 'fulfilled')   setCompletion(comp.value?.data || []);
+        if (ms.status === 'fulfilled')     setMilestones(ms.value?.milestones || []);
+        if (kpis.status === 'fulfilled')   setKpiValues(kpis.value?.data || []);
+        if (devSp.status === 'fulfilled')  setDevSprint(devSp.value);
+        if (hoursSp.status === 'fulfilled') setHoursSprint(hoursSp.value);
 
         // 3. Burndown — needs active sprint
         if (active?.sprintId) {
@@ -500,6 +506,40 @@ function Reports() {
         ],
       }
     : null;
+
+  // ── Grouped bar palette ───────────────────────────────────────────────────
+  const BAR_PALETTE = [
+    '#4F46E5', '#10B981', '#F59E0B', '#EF4444',
+    '#8B5CF6', '#14B8A6', '#F97316', '#EC4899',
+  ];
+
+  const devSprintChartData =
+    devSprint?.sprints?.length && devSprint?.developers?.length
+      ? {
+          labels: devSprint.sprints,
+          datasets: devSprint.developers.map((dev, i) => ({
+            label: dev.name,
+            data: dev.data,
+            backgroundColor: BAR_PALETTE[i % BAR_PALETTE.length],
+            borderRadius: 5,
+            borderSkipped: false,
+          })),
+        }
+      : null;
+
+  const hoursSprintChartData =
+    hoursSprint?.sprints?.length && hoursSprint?.users?.length
+      ? {
+          labels: hoursSprint.sprints,
+          datasets: hoursSprint.users.map((u, i) => ({
+            label: u.name,
+            data: u.data,
+            backgroundColor: BAR_PALETTE[i % BAR_PALETTE.length],
+            borderRadius: 5,
+            borderSkipped: false,
+          })),
+        }
+      : null;
 
   // ── KPI grouping: latest value per kpiName, grouped by category ───────────
   const kpiByCategory = {};
@@ -771,6 +811,87 @@ function Reports() {
           />
         ) : (
           <NoData text="Sin datos de velocidad" />
+        )}
+      </div>
+
+      {/* ── Tasks by Developer per Sprint ───────────────────────────────── */}
+      <div className="card mt-24">
+        <div className="reports-chart-header mb-24">
+          <div className="reports-chart-header__icon" style={{ background: 'rgba(79,70,229,0.1)' }}>
+            <span className="material-icons" style={{ color: '#4F46E5', fontSize: 20 }}>group</span>
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
+              Tareas Completadas por Desarrollador
+            </h3>
+            <span className="text-sm text-muted">Desglose por sprint y miembro del equipo</span>
+          </div>
+        </div>
+        {loading ? (
+          <Skeleton h={250} />
+        ) : devSprintChartData ? (
+          <ChartBox
+            type="bar"
+            data={devSprintChartData}
+            height={250}
+            options={{
+              scales: {
+                x: { grid: { display: false } },
+                y: {
+                  beginAtZero: true,
+                  ticks: { stepSize: 1 },
+                  title: { display: true, text: 'Tareas completadas', font: { size: 11 } },
+                  grid: { color: 'rgba(0,0,0,0.05)' },
+                },
+              },
+              plugins: {
+                legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+                tooltip: { mode: 'index', intersect: false },
+              },
+            }}
+          />
+        ) : (
+          <NoData text="Sin datos de tareas por desarrollador" />
+        )}
+      </div>
+
+      {/* ── Real Hours by User per Sprint ────────────────────────────────── */}
+      <div className="card mt-24">
+        <div className="reports-chart-header mb-24">
+          <div className="reports-chart-header__icon" style={{ background: 'rgba(16,185,129,0.1)' }}>
+            <span className="material-icons" style={{ color: '#10B981', fontSize: 20 }}>schedule</span>
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
+              Horas Reales por Usuario / Sprint
+            </h3>
+            <span className="text-sm text-muted">Total de horas registradas (ACTUAL_HOURS) por sprint</span>
+          </div>
+        </div>
+        {loading ? (
+          <Skeleton h={250} />
+        ) : hoursSprintChartData ? (
+          <ChartBox
+            type="bar"
+            data={hoursSprintChartData}
+            height={250}
+            options={{
+              scales: {
+                x: { grid: { display: false } },
+                y: {
+                  beginAtZero: true,
+                  title: { display: true, text: 'Horas reales', font: { size: 11 } },
+                  grid: { color: 'rgba(0,0,0,0.05)' },
+                },
+              },
+              plugins: {
+                legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+                tooltip: { mode: 'index', intersect: false },
+              },
+            }}
+          />
+        ) : (
+          <NoData text="Sin horas reales registradas por sprint" />
         )}
       </div>
 
