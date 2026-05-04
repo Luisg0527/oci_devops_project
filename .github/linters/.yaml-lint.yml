@@ -1,0 +1,9 @@
+---
+# Yamllint rules for Super-Linter; tuned for GitHub Actions (truthy `on:` etc.).
+extends: default
+
+rules:
+  line-length: disable
+  document-start: disable
+  truthy:
+    check-keys: false

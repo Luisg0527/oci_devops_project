@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  Super-Linter (Checkstyle) rules aligned with java_checks.xml at repo root.
+  Do not edit the root file from here; this copy is for CI only.
+-->
+<module name="Checker">
+  <property name="charset" value="UTF-8"/>
+  <module name="TreeWalker">
+    <module name="AvoidStarImport"/>
+    <module name="ConstantName"/>
+    <module name="EmptyBlock"/>
+  </module>
+</module>
