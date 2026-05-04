@@ -63,6 +63,8 @@ function Backlog() {
   const [tasks, setTasks] = useState([]);
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+  /** All | userId de alguien con tarea asignada en la vista actual */
+  const [filterAssignee, setFilterAssignee] = useState('All');
   const [page, setPage] = useState(1);
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
@@ -241,6 +243,30 @@ function Backlog() {
     loadTasks();
   }, [selectedSprintId]);
 
+  /** Integrantes que tienen al menos una tarea asignada en la lista cargada */
+  const assigneeFilterOptions = useMemo(() => {
+    const byId = new Map();
+    tasks.forEach((t) => {
+      if (t.assignedTo == null) return;
+      const id = String(t.assignedTo);
+      if (!byId.has(id)) {
+        byId.set(id, {
+          userId: id,
+          fullName: t.assignedToName || `Usuario ${id}`,
+        });
+      }
+    });
+    return Array.from(byId.values()).sort((a, b) =>
+      a.fullName.localeCompare(b.fullName, 'es', { sensitivity: 'base' })
+    );
+  }, [tasks]);
+
+  useEffect(() => {
+    if (filterAssignee === 'All') return;
+    const stillValid = assigneeFilterOptions.some((o) => o.userId === String(filterAssignee));
+    if (!stillValid) setFilterAssignee('All');
+  }, [assigneeFilterOptions, filterAssignee]);
+
   const handleSort = (column) => {
     if (sortBy === column) {
       setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -252,9 +278,10 @@ function Backlog() {
   };
 
   const sorted = useMemo(() => {
-    const base = tasks.filter(t =>
+    const base = tasks.filter((t) =>
       (filterPriority === 'All' || t.priority === filterPriority) &&
-      (filterStatus === 'All' || t.status === filterStatus)
+      (filterStatus === 'All' || t.status === filterStatus) &&
+      (filterAssignee === 'All' || String(t.assignedTo) === String(filterAssignee))
     );
     if (!sortBy) return base;
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -267,7 +294,7 @@ function Backlog() {
       }
       return 0;
     });
-  }, [tasks, filterPriority, filterStatus, sortBy, sortDir]);
+  }, [tasks, filterPriority, filterStatus, filterAssignee, sortBy, sortDir]);
 
   const activeSprint = useMemo(
     () => sprints.find((sprint) => sprint.isActive || sprint.status === 'ACTIVE') || null,
@@ -528,6 +555,23 @@ function Backlog() {
               <option value="DONE">Completado</option>
               <option value="CANCELLED">Cancelado</option>
               <option value="REOPENED">Reabierto</option>
+            </select>
+            <select
+              className="backlog-select backlog-select--assignee"
+              value={filterAssignee}
+              onChange={(e) => {
+                setFilterAssignee(e.target.value);
+                setPage(1);
+              }}
+              title="Filtrar por persona asignada"
+              aria-label="Filtrar por integrante"
+            >
+              <option value="All">Todos los integrantes</option>
+              {assigneeFilterOptions.map((opt) => (
+                <option key={opt.userId} value={opt.userId}>
+                  {opt.fullName}
+                </option>
+              ))}
             </select>
           </div>
           <button className="btn btn--primary" onClick={() => { setShowNewTask(!showNewTask); setFormError(''); }}>

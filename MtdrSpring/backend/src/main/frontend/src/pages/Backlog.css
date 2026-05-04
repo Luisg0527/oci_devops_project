@@ -36,6 +36,11 @@
   border-color: var(--color-primary);
 }
 
+.backlog-select--assignee {
+  min-width: 11rem;
+  max-width: 18rem;
+}
+
 /* Prioridad: badge visible + select transparente encima */
 .backlog-priority-cell {
   position: relative;
