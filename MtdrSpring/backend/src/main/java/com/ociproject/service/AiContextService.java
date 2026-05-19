@@ -45,6 +45,33 @@ public class AiContextService {
      * Builds a JSON string with the curated organizational snapshot.
      * Caps total size to {@code groq.max-context-chars} to avoid token blowups.
      */
+    /**
+     * Compact snapshot for the RAG pipeline. Drops tasks (they come from
+     * Qdrant retrieval) and keeps only the aggregate views that the LLM
+     * can't reconstruct from retrieved chunks: active sprint summary,
+     * project list, team headcount, and the latest KPIs.
+     *
+     * Token budget is typically &lt;5K chars, well under the model context.
+     */
+    @Transactional(readOnly = true)
+    public String buildMiniSnapshotJson() {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("generated_at", LocalDateTime.now().toString());
+        snapshot.put("today", LocalDate.now().toString());
+        snapshot.put("projects", buildProjects());
+        snapshot.put("active_sprints", buildSprints().stream()
+                .filter(m -> "ACTIVE".equals(m.get("status")))
+                .collect(Collectors.toList()));
+        snapshot.put("teams", buildTeams());
+        snapshot.put("kpis_recent", buildRecentKpis());
+        try {
+            return objectMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            log.error("No se pudo serializar mini-snapshot: {}", e.getMessage(), e);
+            return "{}";
+        }
+    }
+
     @Transactional(readOnly = true)
     public String buildSnapshotJson() {
         Map<String, Object> snapshot = new LinkedHashMap<>();

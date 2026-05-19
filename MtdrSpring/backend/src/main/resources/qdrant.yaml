@@ -1,0 +1,100 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Qdrant vector DB — self-hosted in the same OKE namespace as the Spring Boot
+# app. The Spring Boot pods reach it via the cluster-internal service name
+# `qdrant` on port 6333 (REST API).
+#
+# Sizing: ~512Mi RAM / 250m CPU is enough for tens of thousands of 768-dim
+# vectors with Cosine distance. Scale up if the corpus grows.
+#
+# Deploy with:
+#   kubectl -n mtdrworkshop apply -f qdrant.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  labels:
+    app: qdrant
+spec:
+  type: ClusterIP
+  selector:
+    app: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+      protocol: TCP
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  labels:
+    app: qdrant
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.12.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+          env:
+            - name: QDRANT__SERVICE__HTTP_PORT
+              value: "6333"
+            - name: QDRANT__SERVICE__GRPC_PORT
+              value: "6334"
+            # Uncomment to require an API key (matches qdrant.api-key in app):
+            # - name: QDRANT__SERVICE__API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: qdrant-auth
+            #       key: apikey
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 6333
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 6333
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: qdrant-storage
+              mountPath: /qdrant/storage
+  volumeClaimTemplates:
+    - metadata:
+        name: qdrant-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+        # OCI Block Storage is the default StorageClass on OKE.
+        # storageClassName: oci-bv
