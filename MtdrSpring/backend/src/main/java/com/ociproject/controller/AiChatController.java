@@ -103,8 +103,7 @@ public class AiChatController {
                 if (docs.size() > ragProps.getHydratedLimit()) {
                     docs = new ArrayList<>(docs.subList(0, ragProps.getHydratedLimit()));
                 }
-                String mini = aiContextService.buildMiniSnapshotJson();
-                return new ContextBundle("rag", mini, docs, hits);
+                return new ContextBundle("rag", null, docs, hits);
             } catch (Exception e) {
                 log.warn("RAG retrieval failed ({}). Falling back to full snapshot.", e.getMessage());
             }
@@ -118,7 +117,7 @@ public class AiChatController {
         messages.add(new GroqMessage("system", buildSystemPrompt(currentUser, ctx)));
 
         if (request.getHistory() != null) {
-            int from = Math.max(0, request.getHistory().size() - 10);
+            int from = Math.max(0, request.getHistory().size() - 5);
             for (int i = from; i < request.getHistory().size(); i++) {
                 AiChatMessageDto m = request.getHistory().get(i);
                 String role = "assistant".equalsIgnoreCase(m.getRole()) ? "assistant" : "user";
@@ -149,9 +148,6 @@ public class AiChatController {
           .append("Fecha de hoy: ").append(LocalDate.now()).append("\n\n");
 
         if ("rag".equals(ctx.mode)) {
-            sb.append("Resumen agregado de la organización (JSON):\n")
-              .append(ctx.snapshot)
-              .append("\n\n");
             if (!ctx.docs.isEmpty()) {
                 sb.append("Documentos relevantes recuperados para esta consulta (top-")
                   .append(ctx.docs.size()).append(" por similitud, más relevante primero):\n");

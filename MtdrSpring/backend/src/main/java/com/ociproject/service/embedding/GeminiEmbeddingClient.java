@@ -2,6 +2,7 @@ package com.ociproject.service.embedding;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ociproject.config.GeminiProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
@@ -19,8 +20,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Embedding client backed by Google's Gemini "text-embedding-004" model
- * (free tier, multilingual, 768-dim).
+ * Embedding client backed by Google's {@code gemini-embedding-001} model
+ * (768-dim via {@code output_dimensionality}, aligned with Qdrant collection).
  *
  * Endpoints used:
  * - POST {apiUrl}/{model}:embedContent      (single text)
@@ -33,6 +34,8 @@ import java.util.List;
 public class GeminiEmbeddingClient implements EmbeddingClient {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiEmbeddingClient.class);
+    private static final String TASK_QUERY = "RETRIEVAL_QUERY";
+    private static final String TASK_DOCUMENT = "RETRIEVAL_DOCUMENT";
 
     private final GeminiProperties props;
     private RestClient restClient;
@@ -69,8 +72,8 @@ public class GeminiEmbeddingClient implements EmbeddingClient {
             return new float[props.getDimensions()];
         }
         String uri = "/" + props.getModel() + ":embedContent?key=" + props.getApiKey();
-        SingleRequest body = new SingleRequest(props.getModel(),
-                new Content(List.of(new Part(text))));
+        SingleRequest body = new SingleRequest(
+                props.getModel(), TASK_QUERY, props.getDimensions(), new Content(List.of(new Part(text))));
         try {
             SingleResponse resp = restClient.post()
                     .uri(uri)
@@ -108,7 +111,9 @@ public class GeminiEmbeddingClient implements EmbeddingClient {
         List<SingleRequest> requests = new ArrayList<>(chunk.size());
         for (String t : chunk) {
             String safe = (t == null || t.isBlank()) ? " " : t;
-            requests.add(new SingleRequest(props.getModel(), new Content(List.of(new Part(safe)))));
+            requests.add(new SingleRequest(
+                    props.getModel(), TASK_DOCUMENT, props.getDimensions(),
+                    new Content(List.of(new Part(safe)))));
         }
         BatchRequest body = new BatchRequest(requests);
         try {
@@ -127,11 +132,10 @@ public class GeminiEmbeddingClient implements EmbeddingClient {
             return result;
         } catch (RestClientResponseException e) {
             log.warn("Gemini batch failed ({}): {} — falling back to per-item.", e.getStatusCode(), e.getMessage());
-            // Fallback: embed one-by-one so a single bad input doesn't kill the batch.
             List<float[]> result = new ArrayList<>(chunk.size());
             for (String t : chunk) {
                 try {
-                    result.add(embed(t));
+                    result.add(embedDocument(t));
                 } catch (Exception inner) {
                     log.warn("Skipping text after Gemini single-embed failure: {}", inner.getMessage());
                     result.add(new float[props.getDimensions()]);
@@ -141,6 +145,19 @@ public class GeminiEmbeddingClient implements EmbeddingClient {
         } catch (Exception e) {
             throw new EmbeddingException("No se pudo contactar a Gemini (batch): " + e.getMessage());
         }
+    }
+
+    /** Single embed for indexing (RETRIEVAL_DOCUMENT), used when batch fails. */
+    private float[] embedDocument(String text) {
+        String uri = "/" + props.getModel() + ":embedContent?key=" + props.getApiKey();
+        SingleRequest body = new SingleRequest(
+                props.getModel(), TASK_DOCUMENT, props.getDimensions(), new Content(List.of(new Part(text))));
+        SingleResponse resp = restClient.post()
+                .uri(uri)
+                .body(body)
+                .retrieve()
+                .body(SingleResponse.class);
+        return toFloatArray(resp);
     }
 
     private float[] toFloatArray(SingleResponse resp) {
@@ -157,6 +174,17 @@ public class GeminiEmbeddingClient implements EmbeddingClient {
         }
         float[] out = new float[values.size()];
         for (int i = 0; i < values.size(); i++) out[i] = values.get(i).floatValue();
+        return normalize(out);
+    }
+
+    /** L2-normalize truncated vectors (required for gemini-embedding-001 at 768d). */
+    private float[] normalize(float[] v) {
+        double norm = 0;
+        for (float f : v) norm += (double) f * f;
+        if (norm == 0) return v;
+        float scale = (float) (1.0 / Math.sqrt(norm));
+        float[] out = new float[v.length];
+        for (int i = 0; i < v.length; i++) out[i] = v[i] * scale;
         return out;
     }
 
@@ -167,6 +195,10 @@ public class GeminiEmbeddingClient implements EmbeddingClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class SingleRequest {
         private final String model;
+        @JsonProperty("taskType")
+        private final String taskType;
+        @JsonProperty("output_dimensionality")
+        private final Integer outputDimensionality;
         private final Content content;
     }
 

@@ -152,9 +152,6 @@ function TopNavBar() {
       </div>
 
       <div className="topnav__right">
-        <button className="topnav__icon-btn">
-          <span className="material-icons">notifications_none</span>
-        </button>
         <button
           type="button"
           className={`topnav__icon-btn ${isChatOpen ? 'topnav__icon-btn--active' : ''}`}
