@@ -59,6 +59,15 @@ function parseDateStr(str) {
   return isNaN(d.getTime()) ? Infinity : d.getTime();
 }
 
+/** Valor para input type="date" desde API (LocalDate o string). */
+function toInputDate(val) {
+  if (val == null || val === '') return '';
+  if (typeof val === 'string') {
+    return val.includes('T') ? val.split('T')[0] : val.slice(0, 10);
+  }
+  return String(val).slice(0, 10);
+}
+
 function Backlog() {
   const [tasks, setTasks] = useState([]);
   const [filterPriority, setFilterPriority] = useState('All');
@@ -69,7 +78,10 @@ function Backlog() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
   const [formError, setFormError] = useState('');
-  const [showNewSprint, setShowNewSprint] = useState(false);
+  /** null = cerrado; create | edit = modal de sprint */
+  const [sprintModalMode, setSprintModalMode] = useState(null);
+  const [editingSprintId, setEditingSprintId] = useState(null);
+  const [sprintModalSaving, setSprintModalSaving] = useState(false);
   const [newSprint, setNewSprint] = useState({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
   const [sprintError, setSprintError] = useState('');
   const [sprints, setSprints] = useState([]);
@@ -399,7 +411,65 @@ function Backlog() {
     }
   };
 
-  const handleAddSprint = async (event) => {
+  const reloadSprintsList = useCallback(async () => {
+    const projectId = localStorage.getItem('currentProjectId');
+    const token = localStorage.getItem('authToken');
+    if (!token || !projectId) return;
+    try {
+      const sprintResponse = await fetch(
+        `${API_BASE}/sprints?project_id=${projectId}&page=1&limit=50`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const sprintPayload = await sprintResponse.json().catch(() => ({}));
+      if (!sprintResponse.ok) return;
+      const loadedSprints = Array.isArray(sprintPayload.data) ? sprintPayload.data : [];
+      setSprints(loadedSprints);
+    } catch (_) {
+      /* refresh silencioso */
+    }
+  }, []);
+
+  const openSprintModalCreate = () => {
+    setSprintModalMode('create');
+    setEditingSprintId(null);
+    setNewSprint({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
+    setSprintError('');
+  };
+
+  const openSprintModalEdit = (sprint) => {
+    if (!sprint || sprint.sprintId == null) return;
+    setSprintModalMode('edit');
+    setEditingSprintId(sprint.sprintId);
+    setNewSprint({
+      name: sprint.name || '',
+      startDate: toInputDate(sprint.startDate),
+      endDate: toInputDate(sprint.endDate),
+      status: sprint.status || 'PLANNED',
+    });
+    setSprintError('');
+  };
+
+  const closeSprintModal = () => {
+    if (sprintModalSaving) return;
+    setSprintModalMode(null);
+    setEditingSprintId(null);
+    setSprintError('');
+  };
+
+  useEffect(() => {
+    if (!sprintModalMode) return;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (sprintModalSaving) return;
+      setSprintModalMode(null);
+      setEditingSprintId(null);
+      setSprintError('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sprintModalMode, sprintModalSaving]);
+
+  const submitSprintModal = async (event) => {
     event.preventDefault();
     const token = localStorage.getItem('authToken');
     const projectId = localStorage.getItem('currentProjectId');
@@ -413,7 +483,7 @@ function Backlog() {
       return;
     }
     if (!token) {
-      setSprintError('Inicia sesión para crear sprint.');
+      setSprintError('Inicia sesión para guardar el sprint.');
       return;
     }
     if (newSprint.endDate < newSprint.startDate) {
@@ -423,30 +493,57 @@ function Backlog() {
 
     try {
       setSprintError('');
-      const response = await fetch(`${API_BASE}/sprints`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: newSprint.name.trim(),
-          startDate: newSprint.startDate,
-          endDate: newSprint.endDate,
-          status: newSprint.status || undefined,
-          projectId: Number(projectId),
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error || 'No fue posible crear sprint.');
+      setSprintModalSaving(true);
+      if (sprintModalMode === 'create') {
+        const response = await fetch(`${API_BASE}/sprints`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: newSprint.name.trim(),
+            startDate: newSprint.startDate,
+            endDate: newSprint.endDate,
+            status: newSprint.status || undefined,
+            projectId: Number(projectId),
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || 'No fue posible crear sprint.');
+        }
+        await reloadSprintsList();
+        setSelectedSprintId(String(payload.sprintId));
+        setNewSprint({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
+        setSprintModalMode(null);
+        setEditingSprintId(null);
+      } else if (sprintModalMode === 'edit' && editingSprintId != null) {
+        const response = await fetch(`${API_BASE}/sprints/${editingSprintId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: newSprint.name.trim(),
+            startDate: newSprint.startDate,
+            endDate: newSprint.endDate,
+            status: newSprint.status,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || 'No fue posible actualizar el sprint.');
+        }
+        await reloadSprintsList();
+        setSprintModalMode(null);
+        setEditingSprintId(null);
       }
-      setSprints((prev) => [payload, ...prev]);
-      setSelectedSprintId(String(payload.sprintId));
-      setNewSprint({ name: '', startDate: '', endDate: '', status: 'PLANNED' });
-      setShowNewSprint(false);
     } catch (err) {
-      setSprintError(err.message || 'No fue posible crear sprint.');
+      setSprintError(err.message || 'No fue posible guardar el sprint.');
+    } finally {
+      setSprintModalSaving(false);
     }
   };
 
@@ -593,53 +690,143 @@ function Backlog() {
         </div>
       )}
 
-      {/* New Sprint Form */}
-      {showNewSprint && (
-        <form className="backlog-new-task card mt-16" onSubmit={handleAddSprint}>
-          <input
-            type="text"
-            className="backlog-input"
-            placeholder="Nombre del sprint..."
-            value={newSprint.name}
-            onChange={(e) => setNewSprint((prev) => ({ ...prev, name: e.target.value }))}
-            autoFocus
-          />
-          <input
-            type="date"
-            className="backlog-input backlog-input--sm"
-            value={newSprint.startDate}
-            onChange={(e) => setNewSprint((prev) => ({ ...prev, startDate: e.target.value }))}
-          />
-          <input
-            type="date"
-            className="backlog-input backlog-input--sm"
-            value={newSprint.endDate}
-            onChange={(e) => setNewSprint((prev) => ({ ...prev, endDate: e.target.value }))}
-          />
-          <select
-            className="backlog-select"
-            value={newSprint.status}
-            onChange={(e) => setNewSprint((prev) => ({ ...prev, status: e.target.value }))}
+      {sprintModalMode && (
+        <div
+          className="backlog-sprint-modal-overlay"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !sprintModalSaving) closeSprintModal();
+          }}
+        >
+          <div
+            className="backlog-sprint-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="backlog-sprint-modal-title"
           >
-            {SPRINT_STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          <button type="submit" className="btn btn--primary btn--small">Guardar Sprint</button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--small"
-            onClick={() => { setShowNewSprint(false); setSprintError(''); }}
-          >
-            Cancelar
-          </button>
-          {sprintError && (
-            <span className="backlog-form-error">
-              <span className="material-icons" style={{ fontSize: 16 }}>warning</span>
-              {sprintError}
-            </span>
-          )}
-        </form>
+            <button
+              type="button"
+              className="backlog-sprint-modal__close"
+              aria-label="Cerrar"
+              disabled={sprintModalSaving}
+              onClick={closeSprintModal}
+            >
+              <span className="material-icons">close</span>
+            </button>
+            <div className="backlog-sprint-modal__header">
+              <h3 id="backlog-sprint-modal-title" className="backlog-sprint-modal__title">
+                {sprintModalMode === 'edit' ? 'Editar sprint' : 'Crear sprint'}
+              </h3>
+              <div className="backlog-sprint-modal__title-accent" aria-hidden />
+            </div>
+            <form className="backlog-sprint-modal__form" onSubmit={submitSprintModal}>
+              <div className="backlog-sprint-modal__field">
+                <label className="backlog-sprint-modal__label" htmlFor="backlog-sprint-name">
+                  Nombre del sprint
+                </label>
+                <input
+                  id="backlog-sprint-name"
+                  className="backlog-sprint-modal__input"
+                  type="text"
+                  value={newSprint.name}
+                  onChange={(e) => setNewSprint((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Nombre del sprint"
+                  disabled={sprintModalSaving}
+                  autoFocus
+                />
+              </div>
+              <div className="backlog-sprint-modal__row">
+                <div className="backlog-sprint-modal__field">
+                  <label className="backlog-sprint-modal__label" htmlFor="backlog-sprint-start">
+                    Fecha inicio
+                  </label>
+                  <div className="backlog-sprint-modal__input-wrap">
+                    <input
+                      id="backlog-sprint-start"
+                      className="backlog-sprint-modal__input"
+                      type="date"
+                      value={newSprint.startDate}
+                      onChange={(e) => setNewSprint((p) => ({ ...p, startDate: e.target.value }))}
+                      disabled={sprintModalSaving}
+                    />
+                    <span className="material-icons backlog-sprint-modal__input-icon" aria-hidden>
+                      calendar_today
+                    </span>
+                  </div>
+                </div>
+                <div className="backlog-sprint-modal__field">
+                  <label className="backlog-sprint-modal__label" htmlFor="backlog-sprint-end">
+                    Fecha fin
+                  </label>
+                  <div className="backlog-sprint-modal__input-wrap">
+                    <input
+                      id="backlog-sprint-end"
+                      className="backlog-sprint-modal__input"
+                      type="date"
+                      value={newSprint.endDate}
+                      onChange={(e) => setNewSprint((p) => ({ ...p, endDate: e.target.value }))}
+                      disabled={sprintModalSaving}
+                    />
+                    <span className="material-icons backlog-sprint-modal__input-icon" aria-hidden>
+                      event
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="backlog-sprint-modal__field">
+                <label className="backlog-sprint-modal__label" htmlFor="backlog-sprint-status">
+                  Estado
+                </label>
+                <div className="backlog-sprint-modal__select-wrap">
+                  <select
+                    id="backlog-sprint-status"
+                    className="backlog-sprint-modal__input backlog-sprint-modal__select"
+                    value={newSprint.status}
+                    onChange={(e) => setNewSprint((p) => ({ ...p, status: e.target.value }))}
+                    disabled={sprintModalSaving}
+                  >
+                    {SPRINT_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="material-icons backlog-sprint-modal__input-icon" aria-hidden>
+                    expand_more
+                  </span>
+                </div>
+              </div>
+              {sprintError && (
+                <div className="backlog-sprint-modal__error" role="alert">
+                  <span className="material-icons" style={{ fontSize: 18 }}>warning</span>
+                  {sprintError}
+                </div>
+              )}
+              <div className="backlog-sprint-modal__actions">
+                <button
+                  type="button"
+                  className="backlog-sprint-modal__btn backlog-sprint-modal__btn--ghost"
+                  disabled={sprintModalSaving}
+                  onClick={closeSprintModal}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="backlog-sprint-modal__btn backlog-sprint-modal__btn--primary"
+                  disabled={sprintModalSaving}
+                >
+                  {sprintModalSaving
+                    ? 'Guardando…'
+                    : sprintModalMode === 'edit'
+                    ? 'Guardar cambios'
+                    : 'Crear sprint'}
+                </button>
+              </div>
+            </form>
+            <div className="backlog-sprint-modal__footer-bar" aria-hidden />
+          </div>
+        </div>
       )}
 
       {/* New Task Form */}
@@ -821,7 +1008,18 @@ function Backlog() {
 
       <section className="card card--dark mt-24 backlog-sprint-board">
         <div className="backlog-sprint-board__current">
-          <span className="backlog-sprint-board__kicker">Sprint actual</span>
+          <div className="backlog-sprint-board__current-head">
+            <span className="backlog-sprint-board__kicker">Sprint actual</span>
+            {activeSprint && (
+              <button
+                type="button"
+                className="backlog-sprint-board__edit-link"
+                onClick={() => openSprintModalEdit(activeSprint)}
+              >
+                Editar sprint
+              </button>
+            )}
+          </div>
           <button
             type="button"
             className={`backlog-sprint-board__main ${(
@@ -880,21 +1078,29 @@ function Backlog() {
           <span className="backlog-sprint-board__kicker">Otros sprints</span>
           <div className="backlog-sprint-board__list">
             {otherSprints.slice(0, 2).map((sprint) => (
-              <button
-                key={sprint.sprintId}
-                type="button"
-                className={`backlog-sprint-board__item ${selectedSprintId === String(sprint.sprintId) ? 'is-active' : ''}`}
-                onClick={() => setSelectedSprintId(String(sprint.sprintId))}
-              >
-                <div>
-                  <strong>{sprintTitle(sprint)}</strong>
-                  {selectedSprintId === String(sprint.sprintId) && (
-                    <span className="backlog-sprint-board__active-pill">Filtrando</span>
-                  )}
-                  <span className="backlog-sprint-board__status">{sprintStatusLabel(sprint.status)}</span>
-                </div>
-                <em>{sprint.velocityPercent ?? 0}%</em>
-              </button>
+              <div key={sprint.sprintId} className="backlog-sprint-board__item-row">
+                <button
+                  type="button"
+                  className={`backlog-sprint-board__item ${selectedSprintId === String(sprint.sprintId) ? 'is-active' : ''}`}
+                  onClick={() => setSelectedSprintId(String(sprint.sprintId))}
+                >
+                  <div>
+                    <strong>{sprintTitle(sprint)}</strong>
+                    {selectedSprintId === String(sprint.sprintId) && (
+                      <span className="backlog-sprint-board__active-pill">Filtrando</span>
+                    )}
+                    <span className="backlog-sprint-board__status">{sprintStatusLabel(sprint.status)}</span>
+                  </div>
+                  <em>{sprint.velocityPercent ?? 0}%</em>
+                </button>
+                <button
+                  type="button"
+                  className="backlog-sprint-board__edit-link backlog-sprint-board__edit-link--side"
+                  onClick={() => openSprintModalEdit(sprint)}
+                >
+                  Editar
+                </button>
+              </div>
             ))}
             {otherSprints.length === 0 && (
               <div className="backlog-sprint-board__empty">No hay otros sprints registrados.</div>
@@ -903,7 +1109,9 @@ function Backlog() {
           <button
             type="button"
             className="backlog-sprint-board__add"
-            onClick={() => { setShowNewSprint(!showNewSprint); setSprintError(''); }}
+            onClick={() => {
+              openSprintModalCreate();
+            }}
           >
             <span className="material-icons" style={{ fontSize: 16 }}>add</span>
             Añadir sprint
