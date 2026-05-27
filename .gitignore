@@ -49,3 +49,9 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 /MtdrSpring/backend/wallet
+
+# JMeter load test outputs
+load-tests/jmeter/users.csv
+load-tests/jmeter/results.jtl
+load-tests/jmeter/html-report/
+load-tests/jmeter/apache-jmeter-*/
