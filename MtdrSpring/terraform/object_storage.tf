@@ -7,4 +7,5 @@ resource "oci_objectstorage_bucket" dbbucket {
   namespace = data.oci_objectstorage_namespace.namespace.namespace
   compartment_id = var.ociCompartmentOcid
   name = "${var.runName}-${var.mtdrKey}"
+  freeform_tags = local.common_tags
 }

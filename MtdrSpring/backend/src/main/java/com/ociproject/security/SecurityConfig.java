@@ -32,6 +32,10 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**").permitAll()
+                // Observabilidad: health/liveness/readiness y métricas Prometheus
+                // accesibles para las probes de K8s y el scraper de monitoreo.
+                .requestMatchers("/actuator/health/**", "/actuator/info",
+                                 "/actuator/prometheus").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html",
                                  "/v3/api-docs/**", "/webjars/**").permitAll()
                 .requestMatchers("/dashboard", "/backlog",

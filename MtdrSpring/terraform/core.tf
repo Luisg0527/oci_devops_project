@@ -4,6 +4,7 @@ resource "oci_core_vcn" "okevcn" {
   compartment_id  = var.ociCompartmentOcid
   display_name    = "mtdrworkshop-${var.mtdrKey}"
   dns_label       = "mtdrworkshop"
+  freeform_tags   = local.common_tags
 }
 resource "oci_core_internet_gateway" "igw" {
   compartment_id  = var.ociCompartmentOcid

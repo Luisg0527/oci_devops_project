@@ -11,6 +11,7 @@ resource "oci_containerengine_cluster" "mtdrworkshop_cluster" {
   kubernetes_version  = "v1.34.2"
   name                = "mtdrworkshopcluster-${var.mtdrKey}"
   vcn_id              = oci_core_vcn.okevcn.id
+  freeform_tags       = local.common_tags
   #optional
 
   options{
@@ -38,6 +39,7 @@ resource "oci_containerengine_node_pool" "oke_node_pool" {
   compartment_id     = var.ociCompartmentOcid
   kubernetes_version = "v1.34.2"
   name               = "Pool"
+  freeform_tags      = local.common_tags
   #node_shape        = "VM.Standard.A1.Flex"  #Always Free Option
   node_shape         = "VM.Standard.E3.Flex"
   node_shape_config {

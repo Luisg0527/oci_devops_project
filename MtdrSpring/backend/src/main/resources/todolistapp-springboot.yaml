@@ -42,6 +42,11 @@ spec:
       labels:
         app: todolistapp-springboot
         version: v1
+      annotations:
+        # Prometheus descubre y raspa las métricas de Actuator en cada pod
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
     spec:
       containers:
         - name: todolistapp-springboot
@@ -95,6 +100,36 @@ spec:
               mountPath: /mtdrworkshop/creds
           ports:
             - containerPort: 8080
+          # Optimización de recursos: requests/limits permiten al scheduler
+          # ubicar pods y son requisito para el HorizontalPodAutoscaler.
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "768Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1280Mi"
+          # Tolerancia a fallos: K8s reinicia el pod si liveness falla y solo
+          # enruta tráfico cuando readiness está OK (despliegue sin downtime).
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
       restartPolicy: Always
       volumes:
         - name: creds
@@ -107,4 +142,28 @@ spec:
           labelSelector:
             matchLabels:
               app: todolistapp-springboot
+---
+# Auto-escalamiento horizontal: escala entre 2 y 5 réplicas según el uso de CPU.
+# Requiere metrics-server en el clúster y los resources.requests definidos arriba.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: todolistapp-springboot-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: todolistapp-springboot-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 120
 ---
