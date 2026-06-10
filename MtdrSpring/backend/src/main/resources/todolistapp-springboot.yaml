@@ -95,6 +95,14 @@ spec:
               value: "true"
             - name: RAG_BOOTSTRAP
               value: "true"
+            - name: GROQ_API_URL
+              value: "http://ollama:11434/v1/chat/completions"
+            - name: GROQ_MODEL
+              value: "qwen2.5:3b"
+            - name: GEMINI_API_URL
+              value: "http://ollama:11434"
+            - name: GEMINI_MODEL
+              value: "nomic-embed-text"
           volumeMounts:
             - name: creds
               mountPath: /mtdrworkshop/creds

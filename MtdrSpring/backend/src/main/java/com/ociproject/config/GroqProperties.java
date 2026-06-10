@@ -13,6 +13,6 @@ public class GroqProperties {
     private String apiKey;
     private String apiUrl;
     private String model;
-    private int timeoutMs = 20_000;
+    private int timeoutMs = 120_000;
     private int maxContextChars = 120_000;
 }
