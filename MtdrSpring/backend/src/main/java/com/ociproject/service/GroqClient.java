@@ -40,6 +40,7 @@ public class GroqClient {
                 .requestFactory(factory)
                 .defaultHeader("Authorization", "Bearer " + props.getApiKey())
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
 
@@ -64,6 +65,8 @@ public class GroqClient {
 
         try {
             GroqChatResponse response = restClient.post()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .body(GroqChatResponse.class);
