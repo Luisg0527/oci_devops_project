@@ -43,7 +43,6 @@ spec:
         app: todolistapp-springboot
         version: v1
       annotations:
-        # Prometheus descubre y raspa las métricas de Actuator en cada pod
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
@@ -87,6 +86,11 @@ spec:
                   name: gemini-api
                   key: apikey
                   optional: true
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-bot
+                  key: token
             - name: QDRANT_URL
               value: "http://qdrant:6333"
             - name: QDRANT_COLLECTION
@@ -108,8 +112,6 @@ spec:
               mountPath: /mtdrworkshop/creds
           ports:
             - containerPort: 8080
-          # Optimización de recursos: requests/limits permiten al scheduler
-          # ubicar pods y son requisito para el HorizontalPodAutoscaler.
           resources:
             requests:
               cpu: "250m"
@@ -117,8 +119,6 @@ spec:
             limits:
               cpu: "1000m"
               memory: "1280Mi"
-          # Tolerancia a fallos: K8s reinicia el pod si liveness falla y solo
-          # enruta tráfico cuando readiness está OK (despliegue sin downtime).
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -151,8 +151,6 @@ spec:
             matchLabels:
               app: todolistapp-springboot
 ---
-# Auto-escalamiento horizontal: escala entre 2 y 5 réplicas según el uso de CPU.
-# Requiere metrics-server en el clúster y los resources.requests definidos arriba.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
