@@ -69,16 +69,16 @@ class ProjectServiceTest {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(p));
         when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Project result = service.updateStatus(1L, Project.Status.ON_HOLD);
+        Project result = service.updateStatus(1L, Project.Status.INACTIVE);
 
-        assertThat(result.getStatus()).isEqualTo(Project.Status.ON_HOLD);
+        assertThat(result.getStatus()).isEqualTo(Project.Status.INACTIVE);
     }
 
     @Test
     void updateStatus_notFound_throwsEntityNotFoundException() {
         when(projectRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThrows(EntityNotFoundException.class, () -> service.updateStatus(99L, Project.Status.COMPLETED));
+        assertThrows(EntityNotFoundException.class, () -> service.updateStatus(99L, Project.Status.CLOSED));
         verify(projectRepository, never()).save(any());
     }
 

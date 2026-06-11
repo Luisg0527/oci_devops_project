@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,23 @@ public class ProjectService {
 
     public List<Project> findByManager(Long managerId) {
         return projectRepository.findByManagerUserIdAndDeletedFalse(managerId);
+    }
+
+    /** Proyectos donde el usuario figura en PROJECT_MEMBERS. */
+    public List<Project> findByMemberUserId(Long userId) {
+        return memberRepository.findByIdUserIdAndDeletedFalse(userId).stream()
+                .map(ProjectMember::getProject)
+                .filter(p -> p != null && !Boolean.TRUE.equals(p.getDeleted()))
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    public Optional<String> findMemberRoleInProject(Long projectId, Long userId) {
+        return memberRepository.findByIdUserIdAndDeletedFalse(userId).stream()
+                .filter(m -> projectId.equals(m.getId().getProjectId()))
+                .map(ProjectMember::getRoleInProject)
+                .filter(r -> r != null && !r.isBlank())
+                .findFirst();
     }
 
     public List<Project> findByStatus(Project.Status status) {
@@ -120,5 +138,25 @@ public class ProjectService {
                 .active(active)
                 .build();
         return projectSprintRepository.save(projectSprint);
+    }
+
+    @Transactional
+    public void syncSprintActiveForProject(Long projectId, Long sprintId, boolean active) {
+        projectRepository.findById(projectId)
+                .orElseThrow(() -> new EntityNotFoundException("Project not found: " + projectId));
+
+        List<ProjectSprint> currentSprints = projectSprintRepository.findByIdProjectId(projectId);
+        ProjectSprint target = currentSprints.stream()
+                .filter(ps -> ps.getSprint().getSprintId().equals(sprintId))
+                .findFirst()
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Sprint " + sprintId + " is not assigned to project " + projectId));
+
+        if (active) {
+            currentSprints.forEach(ps -> ps.setActive(ps.getSprint().getSprintId().equals(sprintId)));
+        } else {
+            target.setActive(false);
+        }
+        projectSprintRepository.saveAll(currentSprints);
     }
 }
