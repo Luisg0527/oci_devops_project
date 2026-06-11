@@ -12,7 +12,22 @@ import java.time.LocalDateTime;
 @Builder
 public class Project {
 
-    public enum Status { ACTIVE, ON_HOLD, COMPLETED, CANCELLED }
+    public enum Status {
+        ACTIVE, INACTIVE, CLOSED;
+
+        /** Valores permitidos por la BD; acepta alias legacy del API/UI. */
+        public static Status fromApiValue(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return ACTIVE;
+            }
+            return switch (raw.trim().toUpperCase()) {
+                case "ACTIVE" -> ACTIVE;
+                case "INACTIVE", "ON_HOLD" -> INACTIVE;
+                case "CLOSED", "COMPLETED", "CANCELLED" -> CLOSED;
+                default -> throw new IllegalArgumentException("Estado de proyecto no válido: " + raw);
+            };
+        }
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
