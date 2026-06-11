@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
-import App from './App';
+import { ProjectProvider } from './context/ProjectContext';
 import './theme.css';
 
 const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
@@ -14,23 +14,25 @@ const Loading = () => (
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     height: '100vh', fontFamily: 'var(--font-family)', color: 'var(--color-text-secondary)'
   }}>
-    Loading...
+    Cargando…
   </div>
 );
 
 function Root() {
   return (
     <Router>
-      <Suspense fallback={<Loading />}>
-        <Switch>
-          <Route exact path="/" component={App} />
-          <Route path="/dashboard" component={ManagerDashboard} />
-          <Route path="/backlog" component={Backlog} />
-          <Route path="/team" component={TeamManagement} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/login" component={Login} />
-        </Switch>
-      </Suspense>
+      <ProjectProvider>
+        <Suspense fallback={<Loading />}>
+          <Switch>
+            <Route exact path="/" component={Login} />
+            <Route path="/dashboard" component={ManagerDashboard} />
+            <Route path="/backlog" component={Backlog} />
+            <Route path="/team" component={TeamManagement} />
+            <Route path="/reports" component={Reports} />
+            <Route path="/login" component={Login} />
+          </Switch>
+        </Suspense>
+      </ProjectProvider>
     </Router>
   );
 }
