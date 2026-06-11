@@ -1,8 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import PageLayout from '../components/layout/PageLayout';
 import TeamMemberCard from '../components/common/TeamMemberCard';
+import InviteMemberModal from '../components/common/InviteMemberModal';
 import ProgressBar from '../components/common/ProgressBar';
 import { API_BASE } from '../config/apiBase';
+import { useProject } from '../context/ProjectContext';
+import { canInviteMembers, labelUserStatus } from '../utils/labelsEs';
+import '../components/common/DetailModal.css';
 import './TeamManagement.css';
 
 function authHeaders() {
@@ -10,22 +14,8 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function resolveTeamId(headers) {
-  let tid = localStorage.getItem('userTeamId');
-  if (tid) return tid;
-  const res = await fetch(`${API_BASE}/teams`, { headers });
-  if (!res.ok) return null;
-  const body = await res.json().catch(() => ({}));
-  const teams = Array.isArray(body.data) ? body.data : [];
-  if (teams.length === 1) {
-    const id = String(teams[0].teamId);
-    localStorage.setItem('userTeamId', id);
-    return id;
-  }
-  return null;
-}
-
 function TeamManagement() {
+  const { projectId, projectName } = useProject();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [noTeam, setNoTeam] = useState(false);
@@ -33,22 +23,26 @@ function TeamManagement() {
   const [teamDescription, setTeamDescription] = useState('');
   const [members, setMembers] = useState([]);
   const [roles, setRoles] = useState([]);
-  const [showInvite, setShowInvite] = useState(false);
-  const [invite, setInvite] = useState({
-    fullName: '',
-    email: '',
-    username: '',
-    password: '',
-    roleId: '',
-  });
-  const [formError, setFormError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
+  const userCanInviteMembers = useMemo(
+    () => canInviteMembers(localStorage.getItem('userRole')),
+    []
+  );
 
   const loadData = useCallback(async () => {
     const token = localStorage.getItem('authToken');
     if (!token) {
       setError('Inicia sesión para ver el equipo.');
+      setLoading(false);
+      return;
+    }
+    if (!projectId) {
+      setNoTeam(true);
+      setMembers([]);
+      setTeamName('');
+      setTeamDescription('');
+      setError('Selecciona un proyecto para ver el equipo.');
       setLoading(false);
       return;
     }
@@ -59,69 +53,72 @@ function TeamManagement() {
     setNoTeam(false);
 
     try {
-      const teamId = await resolveTeamId(headers);
-      if (!teamId) {
-        setNoTeam(true);
-        setMembers([]);
-        setTeamName('');
-        setTeamDescription('');
-        setLoading(false);
-        return;
-      }
-
-      const [teamRes, rolesRes, usersRes] = await Promise.all([
-        fetch(`${API_BASE}/teams/${teamId}`, { headers }),
+      const [membersRes, rolesRes] = await Promise.all([
+        fetch(`${API_BASE}/projects/${projectId}/members`, { headers }),
         fetch(`${API_BASE}/roles`, { headers }),
-        fetch(`${API_BASE}/users?teamId=${encodeURIComponent(teamId)}&page=1&limit=200`, { headers }),
       ]);
 
-      if (teamRes.status === 401 || rolesRes.status === 401 || usersRes.status === 401) {
+      if (membersRes.status === 401 || rolesRes.status === 401) {
         localStorage.removeItem('authToken');
         window.location.assign('/login');
         return;
       }
 
-      if (!teamRes.ok) {
-        const err = await teamRes.json().catch(() => ({}));
-        throw new Error(err.message || 'No se pudo cargar el equipo.');
+      if (!membersRes.ok) {
+        const err = await membersRes.json().catch(() => ({}));
+        throw new Error(err.message || err.error || 'No se pudo cargar el equipo del proyecto.');
       }
       if (!rolesRes.ok) {
         const err = await rolesRes.json().catch(() => ({}));
         throw new Error(err.message || 'No se pudieron cargar los roles.');
       }
-      if (!usersRes.ok) {
-        const err = await usersRes.json().catch(() => ({}));
-        throw new Error(err.message || 'No se pudieron cargar los miembros.');
-      }
 
-      const teamBody = await teamRes.json();
+      const membersBody = await membersRes.json();
       const rolesBody = await rolesRes.json();
-      const usersBody = await usersRes.json();
 
-      setTeamName(teamBody.name || '');
-      setTeamDescription(teamBody.description || '');
+      setTeamName(projectName || 'Proyecto');
+      setTeamDescription('Miembros asignados al proyecto');
 
       const roleList = Array.isArray(rolesBody.data) ? rolesBody.data : [];
       setRoles(roleList);
-      setInvite((prev) => {
-        if (prev.roleId && roleList.some((r) => String(r.roleId) === prev.roleId)) {
-          return prev;
-        }
-        if (!roleList.length) return prev;
-        return { ...prev, roleId: String(roleList[0].roleId) };
-      });
 
-      const userRows = Array.isArray(usersBody.data) ? usersBody.data : [];
+      const memberRows = Array.isArray(membersBody.members) ? membersBody.members : [];
 
       const withWorkload = await Promise.all(
-        userRows.map(async (u) => {
+        memberRows.map(async (m) => {
           try {
-            const wr = await fetch(`${API_BASE}/users/${u.userId}/workload`, { headers });
-            if (!wr.ok) return { ...u, workload: 0 };
+            const wr = await fetch(
+              `${API_BASE}/users/${m.userId}/workload?project_id=${projectId}`,
+              { headers }
+            );
+            if (!wr.ok) {
+              return {
+                userId: m.userId,
+                fullName: m.fullName,
+                email: m.email,
+                roleName: m.roleInProject,
+                status: 'ACTIVE',
+                workload: 0,
+              };
+            }
             const w = await wr.json();
-            return { ...u, workload: w.workloadPercent ?? 0 };
+            return {
+              userId: m.userId,
+              fullName: m.fullName,
+              email: m.email,
+              roleName: m.roleInProject,
+              status: 'ACTIVE',
+              workload: w.workloadPercent ?? 0,
+            };
           } catch {
-            return { ...u, workload: 0 };
+            return {
+              userId: m.userId,
+              fullName: m.fullName,
+              email: m.email,
+              roleName: m.roleInProject,
+              status: 'ACTIVE',
+              workload: 0,
+            };
           }
         })
       );
@@ -132,7 +129,7 @@ function TeamManagement() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId, projectName]);
 
   useEffect(() => {
     loadData();
@@ -161,86 +158,11 @@ function TeamManagement() {
     return 'Revisa el tablero de backlog para equilibrar tareas entre roles.';
   }, [members]);
 
-  const handleInvite = async (e) => {
-    e.preventDefault();
-    setFormError('');
-    const teamId = localStorage.getItem('userTeamId');
-    if (!teamId) {
-      setFormError('No hay equipo seleccionado.');
-      return;
-    }
-    if (!invite.fullName.trim()) {
-      setFormError('Indica el nombre completo.');
-      return;
-    }
-    if (!invite.email.trim()) {
-      setFormError('Indica el correo.');
-      return;
-    }
-    if (!invite.username.trim()) {
-      setFormError('Indica el nombre de usuario.');
-      return;
-    }
-    if (!invite.password || invite.password.length < 6) {
-      setFormError('La contraseña debe tener al menos 6 caracteres.');
-      return;
-    }
-    if (!invite.roleId) {
-      setFormError('Selecciona un rol.');
-      return;
-    }
-
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      window.location.assign('/login');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/users`, {
-        method: 'POST',
-        headers: {
-          ...authHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fullName: invite.fullName.trim(),
-          email: invite.email.trim(),
-          username: invite.username.trim(),
-          password: invite.password,
-          roleId: Number(invite.roleId),
-          teamId: Number(teamId),
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (response.status === 401) {
-        localStorage.removeItem('authToken');
-        window.location.assign('/login');
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(payload.message || payload.error || `Error ${response.status}`);
-      }
-      setInvite((prev) => ({
-        fullName: '',
-        email: '',
-        username: '',
-        password: '',
-        roleId: prev.roleId,
-      }));
-      setShowInvite(false);
-      await loadData();
-    } catch (err) {
-      setFormError(err.message || 'No se pudo crear el usuario.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleViewMember = (member) => {
     setSelectedMember(member);
   };
+
+  const memberUserIds = useMemo(() => members.map((m) => m.userId), [members]);
 
   if (loading) {
     return (
@@ -262,20 +184,19 @@ function TeamManagement() {
               'Coordina miembros y carga de trabajo según los datos del sistema.'}
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          disabled={noTeam}
-          onClick={() => {
-            setFormError('');
-            setShowInvite((v) => !v);
-          }}
-        >
-          <span className="material-icons" style={{ fontSize: 18 }}>
-            person_add
-          </span>
-          Invitar miembro
-        </button>
+        {userCanInviteMembers && (
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={noTeam}
+            onClick={() => setShowInviteModal(true)}
+          >
+            <span className="material-icons" style={{ fontSize: 18 }}>
+              person_add
+            </span>
+            Invitar miembro
+          </button>
+        )}
       </section>
 
       {error && (
@@ -297,71 +218,14 @@ function TeamManagement() {
         </div>
       )}
 
-      {showInvite && !noTeam && (
-        <form className="team-invite card mt-16" onSubmit={handleInvite}>
-          <input
-            type="text"
-            className="backlog-input"
-            placeholder="Nombre completo"
-            value={invite.fullName}
-            onChange={(e) => setInvite((p) => ({ ...p, fullName: e.target.value }))}
-            autoComplete="name"
-            autoFocus
-          />
-          <input
-            type="email"
-            className="backlog-input"
-            placeholder="Correo electrónico"
-            value={invite.email}
-            onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))}
-            autoComplete="email"
-          />
-          <input
-            type="text"
-            className="backlog-input"
-            placeholder="Nombre de usuario (login)"
-            value={invite.username}
-            onChange={(e) => setInvite((p) => ({ ...p, username: e.target.value }))}
-            autoComplete="username"
-          />
-          <input
-            type="password"
-            className="backlog-input"
-            placeholder="Contraseña inicial"
-            value={invite.password}
-            onChange={(e) => setInvite((p) => ({ ...p, password: e.target.value }))}
-            autoComplete="new-password"
-          />
-          <select
-            className="backlog-select"
-            value={invite.roleId}
-            onChange={(e) => setInvite((p) => ({ ...p, roleId: e.target.value }))}
-          >
-            {roles.map((r) => (
-              <option key={r.roleId} value={String(r.roleId)}>
-                {r.roleName}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="btn btn--primary btn--small" disabled={submitting}>
-            {submitting ? 'Creando…' : 'Crear usuario'}
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--small"
-            onClick={() => {
-              setShowInvite(false);
-              setFormError('');
-            }}
-          >
-            Cancelar
-          </button>
-          {formError && (
-            <p className="login-form__feedback login-form__feedback--error" style={{ gridColumn: '1 / -1' }}>
-              {formError}
-            </p>
-          )}
-        </form>
+      {showInviteModal && userCanInviteMembers && !noTeam && (
+        <InviteMemberModal
+          projectId={projectId}
+          memberUserIds={memberUserIds}
+          roles={roles}
+          onClose={() => setShowInviteModal(false)}
+          onSuccess={loadData}
+        />
       )}
 
       {!noTeam && (
@@ -447,7 +311,7 @@ function TeamManagement() {
                   <span className="material-icons member-modal__icon">circle</span>
                   <div>
                     <span className="member-modal__label">Estado</span>
-                    <span className="member-modal__value">{selectedMember.status}</span>
+                    <span className="member-modal__value">{labelUserStatus(selectedMember.status)}</span>
                   </div>
                 </div>
               )}
