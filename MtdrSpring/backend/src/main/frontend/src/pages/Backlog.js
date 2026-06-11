@@ -3,6 +3,11 @@ import PageLayout from '../components/layout/PageLayout';
 import PriorityBadge from '../components/common/PriorityBadge';
 import StatusBadge from '../components/common/StatusBadge';
 import { API_BASE } from '../config/apiBase';
+import { useProject } from '../context/ProjectContext';
+import { labelEfficiencyRating, canManageSprints } from '../utils/labelsEs';
+import RowActionsMenu from '../components/common/RowActionsMenu';
+import TaskEditModal from '../components/common/TaskEditModal';
+import SprintEditModal from '../components/common/SprintEditModal';
 import './Backlog.css';
 
 const ITEMS_PER_PAGE = 5;
@@ -16,7 +21,7 @@ function mapTaskFromApi(task) {
   }
   return {
     taskId: task.taskId,
-    title: task.title || 'Sin titulo',
+    title: task.title || 'Sin título',
     priority: task.priority || 'MEDIUM',
     status: task.status || 'PENDING',
     sprintId: task.sprintId ?? null,
@@ -60,6 +65,7 @@ function parseDateStr(str) {
 }
 
 function Backlog() {
+  const { projectId } = useProject();
   const [tasks, setTasks] = useState([]);
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -84,6 +90,16 @@ function Backlog() {
   const [taskActionError, setTaskActionError] = useState('');
   /** Usuarios reales del equipo (mismo criterio que Team Management) */
   const [assignableUsers, setAssignableUsers] = useState([]);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editingSprint, setEditingSprint] = useState(null);
+  const [sprintEditSaving, setSprintEditSaving] = useState(false);
+  const [sprintEditError, setSprintEditError] = useState('');
+  const userCanManageSprints = useMemo(
+    () => canManageSprints(localStorage.getItem('userRole')),
+    []
+  );
 
   const loadAssignableUsers = useCallback(async () => {
     const token = localStorage.getItem('authToken');
@@ -93,6 +109,26 @@ function Backlog() {
     }
     const headers = { Authorization: `Bearer ${token}` };
     try {
+      if (projectId) {
+        const membersRes = await fetch(`${API_BASE}/projects/${projectId}/members`, { headers });
+        if (membersRes.status === 401) {
+          localStorage.removeItem('authToken');
+          window.location.assign('/login');
+          return;
+        }
+        if (membersRes.ok) {
+          const membersBody = await membersRes.json().catch(() => ({}));
+          const rows = Array.isArray(membersBody.members) ? membersBody.members : [];
+          setAssignableUsers(
+            rows.map((m) => ({
+              userId: m.userId,
+              fullName: m.fullName || `Usuario ${m.userId}`,
+            }))
+          );
+          return;
+        }
+      }
+
       let teamId = localStorage.getItem('userTeamId');
       if (!teamId) {
         const res = await fetch(`${API_BASE}/teams`, { headers });
@@ -133,115 +169,129 @@ function Backlog() {
     } catch {
       setAssignableUsers([]);
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     if (token) {
       loadAssignableUsers();
     }
-  }, [loadAssignableUsers]);
+  }, [loadAssignableUsers, projectId]);
 
   useEffect(() => {
-    if (showNewTask) {
+    if (showNewTask || editingTask) {
       loadAssignableUsers();
     }
-  }, [showNewTask, loadAssignableUsers]);
+  }, [showNewTask, editingTask, loadAssignableUsers]);
+
+  const loadSprints = useCallback(async () => {
+    const token = localStorage.getItem('authToken');
+    if (!token || !projectId) return null;
+
+    try {
+      const sprintResponse = await fetch(`${API_BASE}/sprints?project_id=${projectId}&page=1&limit=50`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const sprintPayload = await sprintResponse.json().catch(() => ({}));
+      if (!sprintResponse.ok) {
+        throw new Error(sprintPayload.error || 'No fue posible cargar sprints.');
+      }
+      const loadedSprints = Array.isArray(sprintPayload.data) ? sprintPayload.data : [];
+      setSprints(loadedSprints);
+      return loadedSprints;
+    } catch (err) {
+      setLoadError(err.message || 'No fue posible cargar sprints.');
+      return null;
+    }
+  }, [projectId]);
 
   useEffect(() => {
-    const projectId = localStorage.getItem('currentProjectId');
+    defaultActiveSprintAppliedRef.current = false;
+    setSelectedSprintId('ALL');
+    setFilterPriority('All');
+    setFilterStatus('All');
+    setFilterAssignee('All');
+    setPage(1);
+    setTasks([]);
+    setSprints([]);
+  }, [projectId]);
+
+  useEffect(() => {
     const token = localStorage.getItem('authToken');
     if (!token) {
-      setLoadError('Inicia sesion para cargar el backlog.');
+      setLoadError('Inicia sesión para cargar el backlog.');
       return;
     }
     if (!projectId) {
-      setLoadError('Selecciona un proyecto para cargar los sprints.');
+      setLoadError('Selecciona un proyecto para cargar el backlog.');
       return;
     }
 
-    const loadSprints = async () => {
-      try {
-        const sprintResponse = await fetch(`${API_BASE}/sprints?project_id=${projectId}&page=1&limit=50`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const sprintPayload = await sprintResponse.json().catch(() => ({}));
-        if (!sprintResponse.ok) {
-          throw new Error(sprintPayload.error || 'No fue posible cargar sprints.');
-        }
-        const loadedSprints = Array.isArray(sprintPayload.data) ? sprintPayload.data : [];
-        setSprints(loadedSprints);
+    const initSprints = async () => {
+      const loadedSprints = await loadSprints();
+      if (!loadedSprints) return;
 
-        const activeSprint = loadedSprints.find((s) => s.isActive || s.status === 'ACTIVE') || null;
-
-        if (!defaultActiveSprintAppliedRef.current) {
-          defaultActiveSprintAppliedRef.current = true;
-          if (activeSprint) {
-            setSelectedSprintId(String(activeSprint.sprintId));
-          } else {
-            setSelectedSprintId('ALL');
-          }
-        } else if (
-          selectedSprintId !== 'BACKLOG' &&
-          selectedSprintId !== 'ALL' &&
-          !loadedSprints.some((sprint) => String(sprint.sprintId) === String(selectedSprintId))
-        ) {
-          setSelectedSprintId(activeSprint ? String(activeSprint.sprintId) : 'ALL');
-        }
-      } catch (err) {
-        setLoadError(err.message || 'No fue posible cargar sprints.');
+      const activeSprint = loadedSprints.find((s) => s.isActive) || null;
+      if (!defaultActiveSprintAppliedRef.current) {
+        defaultActiveSprintAppliedRef.current = true;
+        setSelectedSprintId(activeSprint ? String(activeSprint.sprintId) : 'ALL');
       }
     };
 
-    loadSprints();
-  }, [selectedSprintId]);
+    initSprints();
+  }, [projectId, loadSprints]);
 
-  useEffect(() => {
-    const projectId = localStorage.getItem('currentProjectId');
+  const loadTasks = useCallback(async ({ silent = false } = {}) => {
     const token = localStorage.getItem('authToken');
     if (!token || !projectId) {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
       return;
     }
 
-    const loadTasks = async () => {
-      try {
+    try {
+      if (!silent) {
         setLoadError('');
         setIsLoading(true);
-        const params = new URLSearchParams({
-          page: '1',
-          limit: '200',
-          project_id: projectId,
-        });
-        if (selectedSprintId === 'BACKLOG') {
-          params.set('task_stage', 'BACKLOG');
-        } else if (selectedSprintId !== 'ALL') {
-          params.set('sprint_id', selectedSprintId);
-        }
-
-        const response = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || 'No fue posible cargar tareas.');
-        }
-
-        const normalized = (payload.data || []).map(mapTaskFromApi);
-        setTasks(normalized);
-      } catch (err) {
-        setLoadError(err.message || 'No fue posible cargar tareas.');
-      } finally {
-        setIsLoading(false);
       }
-    };
+      const params = new URLSearchParams({
+        page: '1',
+        limit: '200',
+        project_id: projectId,
+      });
+      if (selectedSprintId === 'BACKLOG') {
+        params.set('task_stage', 'BACKLOG');
+      } else if (selectedSprintId !== 'ALL') {
+        params.set('sprint_id', selectedSprintId);
+      }
 
+      const response = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible cargar tareas.');
+      }
+
+      const normalized = (payload.data || []).map(mapTaskFromApi);
+      setTasks(normalized);
+    } catch (err) {
+      setLoadError(err.message || 'No fue posible cargar tareas.');
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  }, [projectId, selectedSprintId]);
+
+  useEffect(() => {
     loadTasks();
-  }, [selectedSprintId]);
+  }, [loadTasks]);
+
+  const refreshAfterTaskChange = useCallback(async () => {
+    await Promise.all([loadTasks({ silent: true }), loadSprints()]);
+  }, [loadTasks, loadSprints]);
 
   /** Integrantes que tienen al menos una tarea asignada en la lista cargada */
   const assigneeFilterOptions = useMemo(() => {
@@ -297,7 +347,12 @@ function Backlog() {
   }, [tasks, filterPriority, filterStatus, filterAssignee, sortBy, sortDir]);
 
   const activeSprint = useMemo(
-    () => sprints.find((sprint) => sprint.isActive || sprint.status === 'ACTIVE') || null,
+    () => sprints.find((sprint) => sprint.isActive) || null,
+    [sprints]
+  );
+
+  const sortedSprints = useMemo(
+    () => [...sprints].sort((a, b) => (a.sprintNumber || 0) - (b.sprintNumber || 0)),
     [sprints]
   );
 
@@ -337,7 +392,6 @@ function Backlog() {
       setFormError(`Campos requeridos: ${missing.join(', ')}`);
       return;
     }
-    const projectId = localStorage.getItem('currentProjectId');
     const creatorId = localStorage.getItem('userId');
     if (!projectId) {
       setFormError('Selecciona un proyecto en la barra superior.');
@@ -388,12 +442,11 @@ function Backlog() {
       if (!response.ok) {
         throw new Error(payload.error || 'No fue posible crear la tarea.');
       }
-      const normalized = mapTaskFromApi(payload);
-      setTasks((prev) => [normalized, ...prev]);
       setNewTask({ title: '', priority: 'MEDIUM', assignedTo: '', dueDate: '' });
       setShowNewTask(false);
       setPage(1);
       setTaskActionError('');
+      await refreshAfterTaskChange();
     } catch (err) {
       setFormError(err.message || 'No fue posible crear la tarea.');
     }
@@ -401,8 +454,8 @@ function Backlog() {
 
   const handleAddSprint = async (event) => {
     event.preventDefault();
+    if (!userCanManageSprints) return;
     const token = localStorage.getItem('authToken');
-    const projectId = localStorage.getItem('currentProjectId');
     const missing = [];
     if (!newSprint.name.trim()) missing.push('Nombre');
     if (!newSprint.startDate) missing.push('Fecha inicio');
@@ -450,6 +503,62 @@ function Backlog() {
     }
   };
 
+  const handleOpenEditSprint = (sprint) => {
+    if (!userCanManageSprints) return;
+    setEditingSprint(sprint);
+    setSprintEditError('');
+  };
+
+  const handleUpdateSprint = async (form) => {
+    if (!editingSprint || !userCanManageSprints) return;
+
+    const missing = [];
+    if (!form.name.trim()) missing.push('Nombre');
+    if (!form.startDate) missing.push('Fecha inicio');
+    if (!form.endDate) missing.push('Fecha fin');
+    if (!projectId) missing.push('Proyecto seleccionado');
+    if (missing.length > 0) {
+      setSprintEditError(`Campos requeridos: ${missing.join(', ')}`);
+      return;
+    }
+    if (form.endDate < form.startDate) {
+      setSprintEditError('La fecha fin debe ser mayor o igual que la fecha inicio.');
+      return;
+    }
+
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setSprintEditError('Inicia sesión para actualizar sprints.');
+      return;
+    }
+
+    try {
+      setSprintEditSaving(true);
+      setSprintEditError('');
+      const response = await fetch(`${API_BASE}/sprints/${editingSprint.sprintId}`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          startDate: form.startDate,
+          endDate: form.endDate,
+          status: form.status,
+          projectId: Number(projectId),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || payload.message || 'No fue posible actualizar el sprint.');
+      }
+      setEditingSprint(null);
+      await loadSprints();
+    } catch (err) {
+      setSprintEditError(err.message || 'No fue posible actualizar el sprint.');
+    } finally {
+      setSprintEditSaving(false);
+    }
+  };
+
   const handleDeleteTask = async (taskId) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -466,9 +575,79 @@ function Backlog() {
       if (!response.ok) {
         throw new Error(payload.error || payload.message || 'No fue posible eliminar la tarea.');
       }
-      setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+      if (editingTask?.taskId === taskId) {
+        setEditingTask(null);
+        setEditError('');
+      }
+      await refreshAfterTaskChange();
     } catch (err) {
       setTaskActionError(err.message || 'No fue posible eliminar la tarea.');
+    }
+  };
+
+  const handleConfirmDelete = (task) => {
+    const confirmed = window.confirm(
+      `¿Eliminar la tarea "${task.title}"? Esta acción no se puede deshacer.`
+    );
+    if (confirmed) {
+      handleDeleteTask(task.taskId);
+    }
+  };
+
+  const handleUpdateTask = async (form) => {
+    if (!editingTask) return;
+
+    const missing = [];
+    if (!form.title.trim()) missing.push('Título');
+    if (!form.dueDate) missing.push('Fecha límite');
+    if (missing.length > 0) {
+      setEditError(`Campos requeridos: ${missing.join(', ')}`);
+      return;
+    }
+
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setEditError('Inicia sesión para actualizar tareas.');
+      return;
+    }
+
+    const body = {
+      title: form.title.trim(),
+      priority: form.priority,
+      status: form.status,
+      dueDate: form.dueDate,
+    };
+
+    if (form.assignedTo) {
+      body.assignedTo = Number(form.assignedTo);
+    }
+
+    if (form.sprintId === 'BACKLOG') {
+      body.taskStage = 'BACKLOG';
+    } else if (form.sprintId) {
+      body.sprintId = Number(form.sprintId);
+      body.taskStage = 'SPRINT';
+    }
+
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const response = await fetch(`${API_BASE}/tasks/${editingTask.taskId}`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No fue posible actualizar la tarea.');
+      }
+      setEditingTask(null);
+      setTaskActionError('');
+      await refreshAfterTaskChange();
+    } catch (err) {
+      setEditError(err.message || 'No fue posible actualizar la tarea.');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -489,8 +668,7 @@ function Backlog() {
       if (!response.ok) {
         throw new Error(payload.error || 'No fue posible actualizar el estado.');
       }
-      const normalized = mapTaskFromApi(payload);
-      setTasks((prev) => prev.map((t) => (t.taskId === taskId ? normalized : t)));
+      await refreshAfterTaskChange();
     } catch (err) {
       setTaskActionError(err.message || 'No fue posible actualizar el estado.');
     }
@@ -520,20 +698,50 @@ function Backlog() {
     }
   };
 
-  const overdueCount = tasks.filter(t => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const overdueCount = tasks.filter((t) => {
+    if (t.status === 'DONE' || t.status === 'CANCELLED' || !t.dueDate) return false;
+    const due = new Date(`${t.dueDate}T00:00:00`);
+    return due < todayStart;
+  }).length;
   const doneCount = tasks.filter(t => t.status === 'DONE').length;
   const deliveryRate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+  const efficiencyRating = labelEfficiencyRating(
+    deliveryRate >= 80 ? 'ELITE' : deliveryRate >= 60 ? 'HIGH' : 'MEDIUM'
+  );
 
   return (
     <PageLayout>
       {/* Header */}
       <section className="backlog-header">
-        <div>
+        <div className="backlog-header__intro">
           <span className="section-label">Resumen del Proyecto</span>
           <h2 className="section-title">Backlog del Proyecto</h2>
         </div>
         <div className="backlog-header__actions">
           <div className="backlog-filters">
+            <select
+              className="backlog-select backlog-select--sprint"
+              value={selectedSprintId}
+              onChange={(e) => {
+                setSelectedSprintId(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filtrar por sprint"
+            >
+              <option value="ALL">Todos los sprints</option>
+              <option value="BACKLOG">Backlog</option>
+              {sortedSprints.map((s) => (
+                <option key={s.sprintId} value={String(s.sprintId)}>
+                  {sprintTitle(s)}
+                </option>
+              ))}
+            </select>
             <select
               className="backlog-select"
               value={filterPriority}
@@ -594,7 +802,7 @@ function Backlog() {
       )}
 
       {/* New Sprint Form */}
-      {showNewSprint && (
+      {showNewSprint && userCanManageSprints && (
         <form className="backlog-new-task card mt-16" onSubmit={handleAddSprint}>
           <input
             type="text"
@@ -695,7 +903,7 @@ function Backlog() {
       )}
 
       {/* Table */}
-      <div className="card mt-24" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card mt-24 backlog-table-card">
         <table className="data-table">
           <thead>
             <tr>
@@ -776,10 +984,26 @@ function Backlog() {
                   </div>
                 </td>
                 <td className="text-sm">{formatDate(task.dueDate)}</td>
-                <td>
-                  <button className="backlog-action-btn" onClick={() => handleDeleteTask(task.taskId)}>
-                    <span className="material-icons">delete</span>
-                  </button>
+                <td className="backlog-table-actions">
+                  <RowActionsMenu
+                    ariaLabel={`Acciones para ${task.title}`}
+                    items={[
+                      {
+                        label: 'Editar',
+                        icon: 'edit',
+                        onClick: () => {
+                          setEditError('');
+                          setEditingTask(task);
+                        },
+                      },
+                      {
+                        label: 'Eliminar',
+                        icon: 'delete',
+                        danger: true,
+                        onClick: () => handleConfirmDelete(task),
+                      },
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -819,49 +1043,60 @@ function Backlog() {
         </div>
       </div>
 
+      {editingTask && (
+        <TaskEditModal
+          task={editingTask}
+          sprints={sortedSprints}
+          assignableUsers={assignableUsers}
+          sprintLabel={sprintTitle}
+          onClose={() => {
+            setEditingTask(null);
+            setEditError('');
+          }}
+          onSubmit={handleUpdateTask}
+          submitting={editSaving}
+          error={editError}
+        />
+      )}
+
+      {editingSprint && userCanManageSprints && (
+        <SprintEditModal
+          sprint={editingSprint}
+          onClose={() => {
+            setEditingSprint(null);
+            setSprintEditError('');
+          }}
+          onSubmit={handleUpdateSprint}
+          submitting={sprintEditSaving}
+          error={sprintEditError}
+        />
+      )}
+
       <section className="card card--dark mt-24 backlog-sprint-board">
         <div className="backlog-sprint-board__current">
-          <span className="backlog-sprint-board__kicker">Sprint actual</span>
-          <button
-            type="button"
-            className={`backlog-sprint-board__main ${(
-              selectedSprintId === 'ALL' ||
-              selectedSprintId === 'BACKLOG' ||
-              (activeSprint && selectedSprintId === String(activeSprint.sprintId))
-            ) ? 'is-active' : ''}`}
-            onClick={() => {
-              if (!activeSprint) {
-                setSelectedSprintId((prev) => (prev === 'BACKLOG' ? 'ALL' : 'BACKLOG'));
-                return;
-              }
-              const activeId = String(activeSprint.sprintId);
-              if (selectedSprintId === 'ALL') {
-                setSelectedSprintId(activeId);
-              } else if (selectedSprintId === activeId) {
-                setSelectedSprintId('BACKLOG');
-              } else if (selectedSprintId === 'BACKLOG') {
-                setSelectedSprintId('ALL');
-              } else {
-                setSelectedSprintId(activeId);
-              }
-            }}
-          >
+          <div className="backlog-sprint-board__current-head">
+            <span className="backlog-sprint-board__kicker">Sprint actual</span>
+            {activeSprint && userCanManageSprints && (
+              <button
+                type="button"
+                className="backlog-sprint-board__edit"
+                aria-label={`Editar ${sprintTitle(activeSprint)}`}
+                onClick={() => handleOpenEditSprint(activeSprint)}
+              >
+                <span className="material-icons" aria-hidden>
+                  edit
+                </span>
+              </button>
+            )}
+          </div>
+          <div className="backlog-sprint-board__main">
             <h3>{sprintTitle(activeSprint)}</h3>
-              {(selectedSprintId === 'BACKLOG' ||
-                (activeSprint && selectedSprintId === String(activeSprint.sprintId))) && (
-                <span className="backlog-sprint-board__active-pill">Filtrando</span>
-              )}
-              {selectedSprintId === 'ALL' && (
-                <span className="backlog-sprint-board__active-pill">Todas las tareas</span>
-              )}
             <p className="backlog-sprint-board__status">
               {activeSprint
                 ? sprintStatusLabel(activeSprint.status)
-                : selectedSprintId === 'ALL'
-                  ? 'Sin filtro de sprint'
-                  : 'Mostrando tareas en backlog'}
+                : 'Sin sprint activo en el proyecto'}
             </p>
-          </button>
+          </div>
           <div className="backlog-sprint-board__progress-wrap">
             <div className="backlog-sprint-board__progress-label">
               <span>Progreso general</span>
@@ -880,34 +1115,52 @@ function Backlog() {
           <span className="backlog-sprint-board__kicker">Otros sprints</span>
           <div className="backlog-sprint-board__list">
             {otherSprints.slice(0, 2).map((sprint) => (
-              <button
+              <div
                 key={sprint.sprintId}
-                type="button"
                 className={`backlog-sprint-board__item ${selectedSprintId === String(sprint.sprintId) ? 'is-active' : ''}`}
-                onClick={() => setSelectedSprintId(String(sprint.sprintId))}
               >
-                <div>
-                  <strong>{sprintTitle(sprint)}</strong>
-                  {selectedSprintId === String(sprint.sprintId) && (
-                    <span className="backlog-sprint-board__active-pill">Filtrando</span>
-                  )}
-                  <span className="backlog-sprint-board__status">{sprintStatusLabel(sprint.status)}</span>
-                </div>
-                <em>{sprint.velocityPercent ?? 0}%</em>
-              </button>
+                <button
+                  type="button"
+                  className="backlog-sprint-board__item-body"
+                  onClick={() => {
+                    setSelectedSprintId(String(sprint.sprintId));
+                    setPage(1);
+                  }}
+                >
+                  <div>
+                    <strong>{sprintTitle(sprint)}</strong>
+                    <span className="backlog-sprint-board__status">{sprintStatusLabel(sprint.status)}</span>
+                  </div>
+                  <em>{sprint.velocityPercent ?? 0}%</em>
+                </button>
+                {userCanManageSprints && (
+                  <button
+                    type="button"
+                    className="backlog-sprint-board__edit"
+                    aria-label={`Editar ${sprintTitle(sprint)}`}
+                    onClick={() => handleOpenEditSprint(sprint)}
+                  >
+                    <span className="material-icons" aria-hidden>
+                      edit
+                    </span>
+                  </button>
+                )}
+              </div>
             ))}
             {otherSprints.length === 0 && (
               <div className="backlog-sprint-board__empty">No hay otros sprints registrados.</div>
             )}
           </div>
-          <button
-            type="button"
-            className="backlog-sprint-board__add"
-            onClick={() => { setShowNewSprint(!showNewSprint); setSprintError(''); }}
-          >
-            <span className="material-icons" style={{ fontSize: 16 }}>add</span>
-            Añadir sprint
-          </button>
+          {userCanManageSprints && (
+            <button
+              type="button"
+              className="backlog-sprint-board__add"
+              onClick={() => { setShowNewSprint(!showNewSprint); setSprintError(''); }}
+            >
+              <span className="material-icons" style={{ fontSize: 16 }}>add</span>
+              Añadir sprint
+            </button>
+          )}
         </div>
       </section>
 
@@ -925,14 +1178,14 @@ function Backlog() {
           <div className="backlog-insight__row">
             <div className="backlog-insight__metric">
               <span className="backlog-insight__number">{deliveryRate}%</span>
-              <span className="text-sm" style={{ opacity: 0.7 }}>Tasa de entrega a tiempo</span>
+              <span className="text-sm" style={{ opacity: 0.7 }}>Tasa de entrega</span>
             </div>
             <div className="backlog-insight__metric">
               <span className="backlog-insight__number">{doneCount}</span>
-              <span className="text-sm" style={{ opacity: 0.7 }}>Tickets resueltos</span>
+              <span className="text-sm" style={{ opacity: 0.7 }}>Tareas completas</span>
             </div>
             <div className="backlog-insight__metric">
-              <span className="backlog-insight__number">ELITE</span>
+              <span className="backlog-insight__number">{efficiencyRating}</span>
               <span className="text-sm" style={{ opacity: 0.7 }}>Calificación de Eficiencia</span>
             </div>
           </div>

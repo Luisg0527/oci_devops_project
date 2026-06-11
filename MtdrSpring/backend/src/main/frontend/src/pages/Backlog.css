@@ -1,9 +1,21 @@
 .backlog-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+  padding-top: 4px;
+  margin-bottom: 8px;
+}
+
+.backlog-header__intro .section-label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.backlog-header__intro .section-title {
+  margin: 0;
+  line-height: 1.15;
 }
 
 .backlog-header__actions {
@@ -39,6 +51,11 @@
 .backlog-select--assignee {
   min-width: 11rem;
   max-width: 18rem;
+}
+
+.backlog-select--sprint {
+  min-width: 12rem;
+  max-width: 16rem;
 }
 
 /* Prioridad: badge visible + select transparente encima */
@@ -199,6 +216,38 @@
   gap: 14px;
 }
 
+.backlog-sprint-board__current-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.backlog-sprint-board__edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(242, 179, 61, 0.12);
+  color: #ffd98b;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.backlog-sprint-board__edit:hover {
+  background: rgba(242, 179, 61, 0.22);
+  color: #fff3d6;
+}
+
+.backlog-sprint-board__edit .material-icons {
+  font-size: 18px;
+}
+
 .backlog-sprint-board__kicker {
   font-size: 12px;
   text-transform: uppercase;
@@ -214,11 +263,6 @@
   padding: 0;
   text-align: left;
   color: inherit;
-  cursor: pointer;
-}
-
-.backlog-sprint-board__main.is-active {
-  background: transparent;
 }
 
 .backlog-sprint-board__item.is-active {
@@ -332,12 +376,30 @@
   background: rgba(255, 255, 255, 0.04);
   color: inherit;
   border-radius: 8px;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow: hidden;
+}
+
+.backlog-sprint-board__item-body {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
   padding: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   text-align: left;
   cursor: pointer;
+}
+
+.backlog-sprint-board__item .backlog-sprint-board__edit {
+  align-self: center;
+  margin-right: 10px;
 }
 
 .backlog-sprint-board__item strong {
@@ -407,18 +469,14 @@
   flex-shrink: 0;
 }
 
-.backlog-action-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--border-radius-sm);
-  color: var(--color-text-secondary);
-  display: flex;
+.backlog-table-card {
+  padding: 0;
+  overflow: visible;
 }
 
-.backlog-action-btn:hover {
-  background: var(--color-bg-input);
+.backlog-table-actions {
+  text-align: center;
+  width: 72px;
 }
 
 /* Pagination */
