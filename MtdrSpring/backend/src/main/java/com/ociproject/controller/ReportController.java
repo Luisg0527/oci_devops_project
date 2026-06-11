@@ -185,7 +185,7 @@ public class ReportController {
                     m.put("name", s.getName());
                     m.put("date", s.getEndDate() != null ? s.getEndDate().toString() : null);
                     m.put("status", s.getStatus() != null ? s.getStatus().name() : "PENDING");
-                    m.put("is_current", s.getStatus() == Sprint.Status.ACTIVE);
+                    m.put("is_current", Boolean.TRUE.equals(ps.getActive()));
                     return m;
                 })
                 .collect(Collectors.toList());

@@ -8,6 +8,7 @@ import com.ociproject.dto.response.WorkloadResponse;
 import com.ociproject.exception.ConflictException;
 import com.ociproject.exception.ResourceNotFoundException;
 import com.ociproject.model.*;
+import com.ociproject.security.RoleAuthorization;
 import com.ociproject.service.*;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -85,6 +86,7 @@ public class UserController {
     public ResponseEntity<?> create(@Valid @RequestBody CreateUserRequest request,
                                     @AuthenticationPrincipal User actor,
                                     HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageProjects();
         if (userService.findByEmail(request.getEmail()).isPresent()) {
             throw new ConflictException("Email or username already in use.");
         }
@@ -170,11 +172,18 @@ public class UserController {
     }
 
     @GetMapping("/{userId}/workload")
-    public ResponseEntity<WorkloadResponse> getWorkload(@PathVariable Long userId) {
+    public ResponseEntity<WorkloadResponse> getWorkload(
+            @PathVariable Long userId,
+            @RequestParam(name = "project_id", required = false) Long projectId) {
         User user = userService.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
         List<Task> tasks = taskService.findByAssignee(userId);
+        if (projectId != null) {
+            tasks = tasks.stream()
+                    .filter(t -> t.getProject() != null && projectId.equals(t.getProject().getProjectId()))
+                    .collect(Collectors.toList());
+        }
         int total = tasks.size();
         int inProgress = (int) tasks.stream().filter(t -> t.getStatus() == Task.Status.IN_PROGRESS).count();
         int pending = (int) tasks.stream().filter(t -> t.getStatus() == Task.Status.PENDING).count();

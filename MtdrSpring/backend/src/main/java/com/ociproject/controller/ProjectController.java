@@ -9,6 +9,7 @@ import com.ociproject.dto.response.ProjectResponse;
 import com.ociproject.exception.ResourceNotFoundException;
 import com.ociproject.model.*;
 import com.ociproject.service.*;
+import com.ociproject.security.RoleAuthorization;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,18 +40,22 @@ public class ProjectController {
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) String status,
             @RequestParam(name = "manager_id", required = false) Long managerId,
+            @RequestParam(name = "user_id", required = false) Long userId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int limit) {
 
         List<Project> projects;
         if (status != null) {
-            projects = projectService.findByStatus(Project.Status.valueOf(status));
+            projects = projectService.findByStatus(Project.Status.fromApiValue(status));
+        } else if (userId != null) {
+            projects = projectService.findByMemberUserId(userId);
         } else if (managerId != null) {
             projects = projectService.findByManager(managerId);
         } else {
             projects = projectService.findAll();
         }
 
+        final Long memberContext = userId;
         List<ProjectResponse> data = projects.stream()
                 .map(p -> {
                     List<ProjectSprint> sprints = projectService.findSprints(p.getProjectId());
@@ -58,10 +63,18 @@ public class ProjectController {
                             .filter(ps -> Boolean.TRUE.equals(ps.getActive()))
                             .findFirst().orElse(null);
                     int memberCount = projectService.findMembers(p.getProjectId()).size();
+                    String role = memberContext != null
+                            ? projectService.findMemberRoleInProject(p.getProjectId(), memberContext).orElse(null)
+                            : null;
+                    Integer pending = memberContext != null
+                            ? taskService.countPendingTasksInOpenSprints(p.getProjectId())
+                            : null;
                     return ProjectResponse.from(p,
                             activeSprint != null ? activeSprint.getSprint().getSprintId() : null,
                             activeSprint != null ? activeSprint.getSprint().getName() : null,
-                            memberCount);
+                            memberCount,
+                            role,
+                            pending);
                 })
                 .collect(Collectors.toList());
 
@@ -100,6 +113,8 @@ public class ProjectController {
     public ResponseEntity<?> create(@Valid @RequestBody CreateProjectRequest request,
                                     @AuthenticationPrincipal User actor,
                                     HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageProjects();
+
         User manager = userService.findById(request.getManagerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Manager not found."));
 
@@ -108,7 +123,7 @@ public class ProjectController {
                 .description(request.getDescription())
                 .manager(manager)
                 .status(request.getStatus() != null
-                        ? Project.Status.valueOf(request.getStatus())
+                        ? Project.Status.fromApiValue(request.getStatus())
                         : Project.Status.ACTIVE)
                 .deleted(false)
                 .build();
@@ -123,6 +138,8 @@ public class ProjectController {
                                     @RequestBody UpdateProjectRequest request,
                                     @AuthenticationPrincipal User actor,
                                     HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageProjects();
+
         Project project = projectService.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found."));
 
@@ -134,7 +151,7 @@ public class ProjectController {
             project.setManager(manager);
         }
         if (request.getStatus() != null) {
-            project.setStatus(Project.Status.valueOf(request.getStatus()));
+            project.setStatus(Project.Status.fromApiValue(request.getStatus()));
         }
 
         project = projectService.save(project);
@@ -156,6 +173,8 @@ public class ProjectController {
     public ResponseEntity<?> delete(@PathVariable Long projectId,
                                     @AuthenticationPrincipal User actor,
                                     HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageProjects();
+
         projectService.softDelete(projectId);
         auditLogService.log(actor, "DELETE", "PROJECTS", projectId, httpRequest.getRemoteAddr());
         return ResponseEntity.ok(Map.of(
@@ -184,6 +203,7 @@ public class ProjectController {
                                        @Valid @RequestBody AddProjectMemberRequest request,
                                        @AuthenticationPrincipal User actor,
                                        HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageProjects();
         User user = userService.findById(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
@@ -198,6 +218,7 @@ public class ProjectController {
                                           @PathVariable Long userId,
                                           @AuthenticationPrincipal User actor,
                                           HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageProjects();
         projectService.removeMember(projectId, userId);
         auditLogService.log(actor, "DELETE", "PROJECT_MEMBERS", projectId, httpRequest.getRemoteAddr());
         return ResponseEntity.ok(Map.of(

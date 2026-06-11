@@ -19,12 +19,20 @@ public class ProjectResponse {
     private Long activeSprintId;
     private String activeSprintName;
     private Integer memberCount;
+    private String roleInProject;
+    private Integer pendingTasksCount;
     private BigDecimal totalHours;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     public static ProjectResponse from(Project project, Long activeSprintId,
                                         String activeSprintName, int memberCount) {
+        return from(project, activeSprintId, activeSprintName, memberCount, null, null);
+    }
+
+    public static ProjectResponse from(Project project, Long activeSprintId,
+                                        String activeSprintName, int memberCount,
+                                        String roleInProject, Integer pendingTasksCount) {
         return ProjectResponse.builder()
                 .projectId(project.getProjectId())
                 .name(project.getName())
@@ -35,6 +43,8 @@ public class ProjectResponse {
                 .activeSprintId(activeSprintId)
                 .activeSprintName(activeSprintName)
                 .memberCount(memberCount)
+                .roleInProject(roleInProject)
+                .pendingTasksCount(pendingTasksCount)
                 .totalHours(project.getTotalHours())
                 .createdAt(project.getCreatedAt())
                 .updatedAt(project.getUpdatedAt())
