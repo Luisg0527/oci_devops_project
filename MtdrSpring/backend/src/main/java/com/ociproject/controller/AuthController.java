@@ -44,7 +44,7 @@ public class AuthController {
 
         if (credential == null) {
             return ResponseEntity.status(401).body(Map.of(
-                    "error", "Invalid credentials",
+                    "error", "Credenciales inválidas.",
                     "failed_attempts", 0,
                     "account_locked", false
             ));
@@ -52,7 +52,7 @@ public class AuthController {
 
         if (Boolean.TRUE.equals(credential.getAccountLocked())) {
             return ResponseEntity.status(401).body(Map.of(
-                    "error", "Account is locked",
+                    "error", "La cuenta está bloqueada.",
                     "failed_attempts", credential.getFailedAttempts(),
                     "account_locked", true
             ));
@@ -62,7 +62,7 @@ public class AuthController {
             credentialService.recordFailedLogin(credential.getUser().getUserId());
             UserCredential updated = credentialService.findByUsername(request.getUsername()).orElse(credential);
             return ResponseEntity.status(401).body(Map.of(
-                    "error", "Invalid credentials",
+                    "error", "Credenciales inválidas.",
                     "failed_attempts", updated.getFailedAttempts(),
                     "account_locked", Boolean.TRUE.equals(updated.getAccountLocked())
             ));
@@ -94,19 +94,19 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(Map.of("message", "Session terminated successfully."));
+        return ResponseEntity.ok(Map.of("message", "Sesión cerrada correctamente."));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         String refreshToken = request.getRefreshToken();
         if (!tokenProvider.validateToken(refreshToken) || !tokenProvider.isRefreshToken(refreshToken)) {
-            return ResponseEntity.status(401).body(Map.of("error", "Invalid refresh token"));
+            return ResponseEntity.status(401).body(Map.of("error", "Token de actualización inválido."));
         }
         Long userId = tokenProvider.getUserIdFromToken(refreshToken);
         User user = userService.findById(userId).orElse(null);
         if (user == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "User not found"));
+            return ResponseEntity.status(401).body(Map.of("error", "Usuario no encontrado."));
         }
         String roleName = user.getRole() != null ? user.getRole().getRoleName() : "USER";
         UserCredential credential = credentialService.findByUserId(userId).orElse(null);
