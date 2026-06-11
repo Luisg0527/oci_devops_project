@@ -1,0 +1,21 @@
+.project-edit-modal__avatar {
+  box-shadow: 0 0 0 4px var(--color-bg-card), 0 0 0 7px #4f46e5;
+}
+
+.project-edit-modal__status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4338ca;
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.project-edit-modal__textarea {
+  min-height: 88px;
+  resize: vertical;
+}

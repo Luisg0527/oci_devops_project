@@ -1,21 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import PageLayout from '../components/layout/PageLayout';
+import ProjectEditModal from '../components/common/ProjectEditModal';
 import { API_BASE } from '../config/apiBase';
+import { useProject } from '../context/ProjectContext';
+import { canManageProjects, formatProjectRole, labelTaskPriority, labelTaskStatus } from '../utils/labelsEs';
 import './ManagerDashboard.css';
 
 const KPI_SPRINT = 'CUMPLIMIENTO_SPRINT';
 const KPI_DEPLOY = 'TASA_EXITO_DESPLIEGUES';
 
-const HEALTH_LABEL_ES = {
-  Excellent: 'Excelente',
-  Good: 'Bueno',
-  Fair: 'Regular',
-  'At Risk': 'En riesgo',
-};
-
 const PROJECT_STATUS_ES = {
   ACTIVE: 'Activo',
+  INACTIVE: 'En pausa',
+  CLOSED: 'Cerrado',
   ON_HOLD: 'En pausa',
   COMPLETED: 'Completado',
   CANCELLED: 'Cancelado',
@@ -34,33 +32,14 @@ function latestKpiByName(data, kpiName) {
   return list.sort((a, b) => new Date(b.recordedAt || 0) - new Date(a.recordedAt || 0))[0];
 }
 
-function healthBorderClass(label) {
-  const l = label || '';
-  if (l === 'Excellent') return 'mdash-portfolio-card--accent-charcoal';
-  if (l === 'Good') return 'mdash-portfolio-card--accent-gold';
-  if (l === 'Fair') return 'mdash-portfolio-card--accent-gold';
-  return 'mdash-portfolio-card--accent-red';
-}
-
-function healthTextClass(label) {
-  const l = label || '';
-  if (l === 'Excellent') return 'mdash-text-charcoal';
-  if (l === 'Good') return 'mdash-text-gold';
-  if (l === 'Fair') return 'mdash-text-red';
-  return 'mdash-text-red';
-}
-
-function riskSummary(incidents, projectsWithHealth) {
+function riskSummary(incidents) {
   const hasCritical = (incidents || []).some((i) => i.severity === 'CRITICAL');
   if (hasCritical) return { label: 'Alto impacto', detail: 'Hay incidentes críticos abiertos.' };
   const hasHigh = (incidents || []).some((i) => i.severity === 'HIGH');
-  const atRiskProject = (projectsWithHealth || []).some(
-    (p) => p.health && p.health.project_health_label === 'At Risk'
-  );
-  if (hasHigh || atRiskProject) {
-    return { label: 'Impacto moderado', detail: 'Revisa incidentes y salud de proyectos.' };
+  if (hasHigh) {
+    return { label: 'Impacto moderado', detail: 'Revisa incidentes abiertos.' };
   }
-  return { label: 'Bajo impacto', detail: 'Sin alertas críticas en el portafolio actual.' };
+  return { label: 'Bajo impacto', detail: 'Sin alertas críticas en este proyecto.' };
 }
 
 function incidentIconName(type) {
@@ -73,102 +52,215 @@ function incidentIconName(type) {
 
 function ManagerDashboard() {
   const history = useHistory();
+  const { projectId, projectName, setProject } = useProject();
+  const userCanManageProjects = useMemo(
+    () => canManageProjects(localStorage.getItem('userRole')),
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dashboard, setDashboard] = useState(null);
-  const [projectsWithHealth, setProjectsWithHealth] = useState([]);
+  const [myProjects, setMyProjects] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [kpiSprintValue, setKpiSprintValue] = useState(null);
   const [kpiDeployValue, setKpiDeployValue] = useState(null);
+  const [loadedForProjectId, setLoadedForProjectId] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
+  const [projectEditSubmitting, setProjectEditSubmitting] = useState(false);
+  const [projectEditError, setProjectEditError] = useState('');
 
-  const load = useCallback(async () => {
+  const handleOpenEditProject = (event, project) => {
+    event.stopPropagation();
+    if (!userCanManageProjects) return;
+    setProjectEditError('');
+    setEditingProject(project);
+  };
+
+  const handleCloseEditProject = () => {
+    if (projectEditSubmitting) return;
+    setEditingProject(null);
+    setProjectEditError('');
+  };
+
+  const handleProjectEditSubmit = async (form) => {
+    if (!editingProject || !userCanManageProjects) return;
     const token = localStorage.getItem('authToken');
     if (!token) {
-      setError('Inicia sesión para ver el panel.');
-      setLoading(false);
+      window.location.assign('/login');
       return;
     }
 
-    setLoading(true);
-    setError('');
-
-    const headers = { Authorization: `Bearer ${token}` };
+    setProjectEditSubmitting(true);
+    setProjectEditError('');
 
     try {
-      const dashRes = await fetch(`${API_BASE}/dashboard`, { headers });
-      if (dashRes.status === 401) {
+      const response = await fetch(`${API_BASE}/projects/${editingProject.projectId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          description: form.description.trim(),
+          status: form.status,
+        }),
+      });
+
+      if (response.status === 401) {
         localStorage.removeItem('authToken');
         window.location.assign('/login');
         return;
       }
-      if (!dashRes.ok) {
-        const body = await dashRes.json().catch(() => ({}));
-        throw new Error(body.message || `Error ${dashRes.status}`);
+
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.message || body.error || `Error ${response.status}`);
       }
-      const dash = await dashRes.json();
-      const userId = dash.user?.user_id;
-      const sprintId = dash.current_sprint?.sprint_id;
 
-      const [projectsPag, incidentsPag, kpiGlobalPag, kpiSprintPag] = await Promise.all([
-        fetch(`${API_BASE}/projects?manager_id=${userId}&page=1&limit=20`, { headers }).then((r) => {
-          if (r.status === 401) {
-            localStorage.removeItem('authToken');
-            window.location.assign('/login');
-            return {};
-          }
-          return r.json();
-        }),
-        fetch(`${API_BASE}/incidents?resolved=false&page=1&limit=5`, { headers }).then((r) => {
-          if (r.status === 401) {
-            localStorage.removeItem('authToken');
-            window.location.assign('/login');
-            return {};
-          }
-          return r.json();
-        }),
-        fetch(`${API_BASE}/kpi-values?scope_type=GLOBAL&page=1&limit=50`, { headers }).then((r) => {
-          if (!r.ok) return { data: [] };
-          return r.json();
-        }),
-        sprintId
-          ? fetch(
-              `${API_BASE}/kpi-values?scope_type=SPRINT&sprint_id=${sprintId}&page=1&limit=50`,
-              { headers }
-            ).then((r) => {
-              if (!r.ok) return { data: [] };
-              return r.json();
-            })
-          : Promise.resolve({ data: [] }),
-      ]);
-
-      const projectList = projectsPag.data || [];
-      const healthResults = await Promise.all(
-        projectList.map((p) =>
-          fetch(`${API_BASE}/projects/${p.projectId}/health`, { headers })
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null)
+      setMyProjects((prev) =>
+        prev.map((p) =>
+          String(p.projectId) === String(body.projectId)
+            ? {
+                ...p,
+                ...body,
+                roleInProject: p.roleInProject,
+                pendingTasksCount: p.pendingTasksCount,
+              }
+            : p
         )
       );
-      const merged = projectList.map((p, i) => ({ ...p, health: healthResults[i] }));
 
-      const sprintKpi = latestKpiByName(kpiSprintPag.data, KPI_SPRINT);
-      const deployKpi = latestKpiByName(kpiGlobalPag.data, KPI_DEPLOY);
+      if (String(body.projectId) === String(projectId)) {
+        setProject(body.projectId, body.name);
+      }
 
-      setDashboard(dash);
-      setProjectsWithHealth(merged);
-      setIncidents(incidentsPag.data || []);
-      setKpiSprintValue(sprintKpi);
-      setKpiDeployValue(deployKpi);
+      setEditingProject(null);
     } catch (e) {
-      setError(e.message || 'No se pudo cargar el panel.');
+      setProjectEditError(e.message || 'No se pudo guardar el proyecto.');
     } finally {
-      setLoading(false);
+      setProjectEditSubmitting(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+
+    const fetchDashboard = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setError('Inicia sesión para ver el panel.');
+        setLoading(false);
+        return;
+      }
+      if (!projectId) {
+        setDashboard(null);
+        setMyProjects([]);
+        setIncidents([]);
+        setKpiSprintValue(null);
+        setKpiDeployValue(null);
+        setLoadedForProjectId(null);
+        setError('Selecciona un proyecto para ver el panel.');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      setDashboard(null);
+      setMyProjects([]);
+      setIncidents([]);
+      setKpiSprintValue(null);
+      setKpiDeployValue(null);
+      setLoadedForProjectId(null);
+
+      const headers = { Authorization: `Bearer ${token}` };
+
+      try {
+        const dashRes = await fetch(`${API_BASE}/dashboard?project_id=${projectId}`, { headers });
+        if (cancelled) return;
+        if (dashRes.status === 401) {
+          localStorage.removeItem('authToken');
+          window.location.assign('/login');
+          return;
+        }
+        if (!dashRes.ok) {
+          const body = await dashRes.json().catch(() => ({}));
+          throw new Error(body.message || body.error || `Error ${dashRes.status}`);
+        }
+        const dash = await dashRes.json();
+        if (cancelled) return;
+        if (dash.project_id != null && String(dash.project_id) !== String(projectId)) {
+          return;
+        }
+
+        const userId = dash.user?.user_id;
+        const sprintId = dash.current_sprint?.sprint_id;
+
+        const [projectsPag, incidentsPag, kpiGlobalPag, kpiSprintPag] = await Promise.all([
+          fetch(`${API_BASE}/projects?user_id=${userId}&page=1&limit=100`, { headers }).then((r) => {
+            if (r.status === 401) {
+              localStorage.removeItem('authToken');
+              window.location.assign('/login');
+              return {};
+            }
+            return r.json();
+          }),
+          fetch(`${API_BASE}/incidents?resolved=false&project_id=${projectId}&page=1&limit=5`, { headers }).then((r) => {
+            if (r.status === 401) {
+              localStorage.removeItem('authToken');
+              window.location.assign('/login');
+              return {};
+            }
+            return r.json();
+          }),
+          fetch(`${API_BASE}/kpi-values?scope_type=GLOBAL&page=1&limit=50`, { headers }).then((r) => {
+            if (!r.ok) return { data: [] };
+            return r.json();
+          }),
+          sprintId
+            ? fetch(
+                `${API_BASE}/kpi-values?scope_type=SPRINT&sprint_id=${sprintId}&page=1&limit=50`,
+                { headers }
+              ).then((r) => {
+                if (!r.ok) return { data: [] };
+                return r.json();
+              })
+            : Promise.resolve({ data: [] }),
+        ]);
+
+        if (cancelled) return;
+
+        const projectList = projectsPag.data || [];
+
+        const sprintKpi = latestKpiByName(kpiSprintPag.data, KPI_SPRINT);
+        const deployKpi = latestKpiByName(kpiGlobalPag.data, KPI_DEPLOY);
+
+        setDashboard(dash);
+        setMyProjects(projectList);
+        setIncidents(incidentsPag.data || []);
+        setKpiSprintValue(sprintKpi);
+        setKpiDeployValue(deployKpi);
+        setLoadedForProjectId(String(projectId));
+      } catch (e) {
+        if (!cancelled) {
+          setError(e.message || 'No se pudo cargar el panel.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchDashboard();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const isProjectDataReady =
+    !loading && projectId && loadedForProjectId === String(projectId) && dashboard;
 
   const greeting = dashboard?.greeting_summary || {};
   const user = dashboard?.user || {};
@@ -176,6 +268,7 @@ function ManagerDashboard() {
   const myTasks = dashboard?.my_tasks_next5 || [];
 
   const sprintPercent = useMemo(() => {
+    if (!isProjectDataReady || !currentSprint.sprint_id) return null;
     if (kpiSprintValue != null && kpiSprintValue.value != null) {
       const n = Number(kpiSprintValue.value);
       return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : null;
@@ -183,7 +276,7 @@ function ManagerDashboard() {
     const v = currentSprint.velocity_percent;
     if (v == null) return null;
     return Math.min(100, Math.max(0, Number(v)));
-  }, [kpiSprintValue, currentSprint.velocity_percent]);
+  }, [kpiSprintValue, currentSprint.sprint_id, currentSprint.velocity_percent, isProjectDataReady]);
 
   const sprintOnTrack = currentSprint.on_track !== false && (sprintPercent == null || sprintPercent >= 50);
 
@@ -193,7 +286,7 @@ function ManagerDashboard() {
     return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : null;
   }, [kpiDeployValue]);
 
-  const risk = useMemo(() => riskSummary(incidents, projectsWithHealth), [incidents, projectsWithHealth]);
+  const risk = useMemo(() => riskSummary(incidents), [incidents]);
 
   const criticalCount = useMemo(
     () => (incidents || []).filter((i) => i.severity === 'CRITICAL').length,
@@ -203,7 +296,17 @@ function ManagerDashboard() {
   const pendingReview = greeting.pending_review_count ?? 0;
   const highPri = greeting.high_priority_task_count ?? 0;
 
-  if (loading && !dashboard) {
+  if (!projectId) {
+    return (
+      <PageLayout>
+        <div className="mdash-error">
+          <p>{error || 'Selecciona un proyecto para ver el panel.'}</p>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (loading || !isProjectDataReady) {
     return (
       <PageLayout>
         <div className="mdash-loading">Cargando panel…</div>
@@ -216,7 +319,11 @@ function ManagerDashboard() {
       <PageLayout>
         <div className="mdash-error">
           <p>{error}</p>
-          <button type="button" className="btn btn--primary" onClick={load}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => window.location.reload()}
+          >
             Reintentar
           </button>
         </div>
@@ -231,12 +338,12 @@ function ManagerDashboard() {
         <section className="mdash-hero">
           <div className="mdash-hero__main">
             <h1 className="mdash-hero__title">
-              Resumen del espacio — {user.full_name || 'Usuario'}
+              Resumen del espacio — {projectName || user.full_name || 'Usuario'}
             </h1>
             <p className="mdash-hero__subtitle">
               Panel del manager. Tienes{' '}
-              <strong className="mdash-hero__accent">{pendingReview} tareas pendientes</strong> de revisión
-              globales {greeting.current_sprint_name ? `para ${greeting.current_sprint_name}.` : 'para el ciclo actual.'}
+              <strong className="mdash-hero__accent">{pendingReview} tareas pendientes</strong> en sprints
+              abiertos de este proyecto.
               {highPri > 0 && (
                 <>
                   {' '}
@@ -302,53 +409,76 @@ function ManagerDashboard() {
           </div>
         </div>
 
-        {/* Mis proyectos */}
+        {/* Mis proyectos — vista de portafolio; el resto del panel sigue el proyecto seleccionado */}
         <section className="mdash-section">
           <div className="mdash-section__head">
             <h2 className="mdash-section__title">Mis proyectos</h2>
-            <button type="button" className="mdash-link" onClick={() => history.push('/backlog')}>
-              Ver todos los proyectos
-            </button>
           </div>
-          {projectsWithHealth.length === 0 ? (
-            <p className="mdash-empty">No hay proyectos donde seas manager.</p>
+          {myProjects.length === 0 ? (
+            <p className="mdash-empty">No tienes proyectos asignados.</p>
           ) : (
             <div className="mdash-portfolio">
-              {projectsWithHealth.map((p) => {
-                const hl = p.health?.project_health_label;
-                const overdue = p.health?.overdue_tasks_this_week ?? 0;
+              {myProjects.map((p) => {
+                const isActive = p.status === 'ACTIVE';
+                const isSelected = String(p.projectId) === String(projectId);
+                const pending = p.pendingTasksCount ?? 0;
                 return (
                   <article
                     key={p.projectId}
-                    className={`mdash-portfolio-card ${healthBorderClass(hl)}`}
+                    className={`mdash-portfolio-card${isActive ? ' mdash-portfolio-card--active' : ''}${
+                      isSelected ? ' mdash-portfolio-card--selected' : ''
+                    }`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setProject(p.projectId, p.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setProject(p.projectId, p.name);
+                      }
+                    }}
                   >
                     <div className="mdash-portfolio-card__head">
-                      <div className="mdash-portfolio-card__intro">
-                        <p className="mdash-portfolio-card__status">
-                          Estado: {PROJECT_STATUS_ES[p.status] || p.status || '—'}
-                        </p>
-                        <h3 className="mdash-portfolio-card__name">{p.name}</h3>
+                      <h3 className="mdash-portfolio-card__name">{p.name}</h3>
+                      <div className="mdash-portfolio-card__head-actions">
+                        {userCanManageProjects && (
+                          <button
+                            type="button"
+                            className="mdash-portfolio-card__edit"
+                            aria-label={`Editar ${p.name}`}
+                            onClick={(event) => handleOpenEditProject(event, p)}
+                          >
+                            <span className="material-icons" aria-hidden>
+                              edit
+                            </span>
+                          </button>
+                        )}
+                        {isActive && (
+                          <span className="mdash-active-pill">
+                            <span className="mdash-active-pill__dot" aria-hidden />
+                            En curso
+                          </span>
+                        )}
                       </div>
-                      {p.activeSprintName && (
-                        <span className="mdash-tag mdash-tag--sprint">{p.activeSprintName}</span>
-                      )}
                     </div>
                     <dl className="mdash-portfolio-card__stats">
                       <div className="mdash-stat-row">
-                        <dt>Salud</dt>
-                        <dd className={healthTextClass(hl)}>{HEALTH_LABEL_ES[hl] || hl || '—'}</dd>
+                        <dt>Estado</dt>
+                        <dd>{PROJECT_STATUS_ES[p.status] || p.status || '—'}</dd>
                       </div>
                       <div className="mdash-stat-row">
-                        <dt>Miembros</dt>
+                        <dt>Sprint</dt>
+                        <dd>{p.activeSprintName || 'Sin sprint activo'}</dd>
+                      </div>
+                      <div className="mdash-stat-row">
+                        <dt>Rol</dt>
+                        <dd>{formatProjectRole(p.roleInProject)}</dd>
+                      </div>
+                      <div className="mdash-stat-row">
+                        <dt>Pendientes</dt>
                         <dd>
-                          <strong>{p.memberCount ?? 0}</strong> activos
-                        </dd>
-                      </div>
-                      <div className="mdash-stat-row">
-                        <dt>Atrasadas</dt>
-                        <dd className={overdue > 0 ? 'mdash-text-red' : ''}>
-                          <strong>{overdue}</strong>
-                          {overdue === 1 ? ' tarea' : overdue > 1 ? ' tareas' : ''}
+                          <strong>{pending}</strong>
+                          {pending === 1 ? ' tarea' : ' tareas'}
                         </dd>
                       </div>
                     </dl>
@@ -425,8 +555,8 @@ function ManagerDashboard() {
                         )}
                       </div>
                       <p className="mdash-task-meta">
-                        {t.project_name || 'Proyecto'} · {t.status}
-                        {t.priority ? ` · ${t.priority}` : ''}
+                        {t.project_name || 'Proyecto'} · {labelTaskStatus(t.status)}
+                        {t.priority ? ` · ${labelTaskPriority(t.priority)}` : ''}
                       </p>
                     </li>
                   ))}
@@ -439,6 +569,16 @@ function ManagerDashboard() {
           </section>
         </div>
       </div>
+
+      {userCanManageProjects && (
+        <ProjectEditModal
+          project={editingProject}
+          onClose={handleCloseEditProject}
+          onSubmit={handleProjectEditSubmit}
+          submitting={projectEditSubmitting}
+          error={projectEditError}
+        />
+      )}
     </PageLayout>
   );
 }

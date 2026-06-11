@@ -281,27 +281,47 @@
 .mdash-portfolio-card {
   padding: 22px 24px 24px;
   background: #f5f5f5;
-  border-radius: 4px;
-  border-left: 6px solid var(--color-primary);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: none;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
 }
 
 .mdash-portfolio-card:hover {
   background: #eeeeee;
-  box-shadow: none;
 }
 
-.mdash-portfolio-card--accent-charcoal {
-  border-left-color: #1a1a1a;
+.mdash-portfolio-card--active {
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.25), 0 4px 14px rgba(0, 0, 0, 0.06);
 }
 
-.mdash-portfolio-card--accent-gold {
-  border-left-color: var(--color-gold);
+.mdash-portfolio-card--selected {
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.5), 0 4px 16px rgba(79, 70, 229, 0.12);
 }
 
-.mdash-portfolio-card--accent-red {
-  border-left-color: var(--color-red);
+.mdash-active-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4338ca;
+  background: rgba(79, 70, 229, 0.08);
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.mdash-active-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
 }
 
 .mdash-portfolio-card__head {
@@ -309,22 +329,39 @@
   flex-direction: row;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 0;
 }
 
-.mdash-portfolio-card__intro {
-  flex: 1;
-  min-width: 0;
+.mdash-portfolio-card__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.mdash-portfolio-card__status {
-  margin: 0 0 8px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #757575;
+.mdash-portfolio-card__edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.08);
+  color: #4338ca;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mdash-portfolio-card__edit:hover {
+  background: rgba(79, 70, 229, 0.16);
+  color: #312e81;
+}
+
+.mdash-portfolio-card__edit .material-icons {
+  font-size: 18px;
 }
 
 .mdash-portfolio-card__name {
@@ -336,6 +373,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: normal;
+  flex: 1;
 }
 
 .mdash-tag {
