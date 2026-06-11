@@ -6,9 +6,12 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,6 +21,7 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final TaskStatusHistoryRepository statusHistoryRepository;
     private final TaskSprintHistoryRepository sprintHistoryRepository;
+    private final ProjectService projectService;
 
     public List<Task> findAll() {
         return taskRepository.findAllByDeletedFalse();
@@ -37,6 +41,53 @@ public class TaskService {
 
     public List<Task> findByAssignee(Long userId) {
         return taskRepository.findByAssignedToUserIdAndDeletedFalse(userId);
+    }
+
+    /**
+     * Tareas con status PENDING o REOPENED en sprints abiertos del proyecto.
+     */
+    public int countPendingTasksInOpenSprints(Long projectId) {
+        Set<Long> openSprintIds = resolveOpenSprintIdsForProject(projectId);
+        if (openSprintIds.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (Long sprintId : openSprintIds) {
+            total += (int) taskRepository.findBySprintSprintIdAndDeletedFalse(sprintId).stream()
+                    .filter(t -> t.getProject() != null && projectId.equals(t.getProject().getProjectId()))
+                    .filter(t -> t.getStatus() == Task.Status.PENDING || t.getStatus() == Task.Status.REOPENED)
+                    .count();
+        }
+        return total;
+    }
+
+    private Set<Long> resolveOpenSprintIdsForProject(Long projectId) {
+        return projectService.findSprints(projectId).stream()
+                .filter(ps -> {
+                    Sprint s = ps.getSprint();
+                    if (s == null) {
+                        return false;
+                    }
+                    if (Boolean.TRUE.equals(ps.getActive())) {
+                        return true;
+                    }
+                    return s.getStatus() == Sprint.Status.ACTIVE
+                            || s.getStatus() == Sprint.Status.PLANNED;
+                })
+                .map(ps -> ps.getSprint().getSprintId())
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * @deprecated Prefer {@link #countPendingTasksInOpenSprints(Long)} for panel de proyecto.
+     */
+    public int countUserPendingTasksInProject(Long projectId, Long userId) {
+        LocalDate today = LocalDate.now();
+        return (int) taskRepository.findByProjectProjectIdAndDeletedFalse(projectId).stream()
+                .filter(t -> t.getAssignedTo() != null && userId.equals(t.getAssignedTo().getUserId()))
+                .filter(t -> t.getStatus() != Task.Status.DONE && t.getStatus() != Task.Status.CANCELLED)
+                .filter(t -> t.getDueDate() != null && t.getDueDate().isAfter(today))
+                .count();
     }
 
     public List<Task> findByProjectAndStage(Long projectId, Task.Stage stage) {

@@ -39,7 +39,9 @@ public class DashboardController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getDashboard(@AuthenticationPrincipal User currentUser) {
+    public ResponseEntity<?> getDashboard(
+            @AuthenticationPrincipal User currentUser,
+            @RequestParam(name = "project_id", required = false) Long projectId) {
         // User info
         Map<String, Object> user = new LinkedHashMap<>();
         user.put("user_id", currentUser.getUserId());
@@ -49,8 +51,18 @@ public class DashboardController {
         // Team is LAZY in User entity; avoid forcing it in this endpoint.
         user.put("team_name", null);
 
+        if (projectId != null) {
+            projectService.findById(projectId)
+                    .orElseThrow(() -> new com.ociproject.exception.ResourceNotFoundException("Project not found."));
+        }
+
         // My tasks
         List<Task> myTasks = taskService.findByAssignee(currentUser.getUserId());
+        if (projectId != null) {
+            myTasks = myTasks.stream()
+                    .filter(t -> t.getProject() != null && projectId.equals(t.getProject().getProjectId()))
+                    .collect(Collectors.toList());
+        }
         List<Task> activeTasks = myTasks.stream()
                 .filter(t -> t.getStatus() != Task.Status.DONE && t.getStatus() != Task.Status.CANCELLED)
                 .sorted(Comparator.comparing(t -> t.getDueDate() != null ? t.getDueDate() : LocalDate.MAX))
@@ -63,15 +75,36 @@ public class DashboardController {
         // Greeting summary
         Map<String, Object> greetingSummary = new LinkedHashMap<>();
         greetingSummary.put("high_priority_task_count", highPriority);
-        greetingSummary.put("pending_review_count", myTasks.stream()
-                .filter(t -> t.getStatus() == Task.Status.PENDING).count());
+        long pendingReview = projectId != null
+                ? taskService.countPendingTasksInOpenSprints(projectId)
+                : myTasks.stream().filter(t -> t.getStatus() == Task.Status.PENDING).count();
+        greetingSummary.put("pending_review_count", pendingReview);
 
-        // Current sprint (find active)
-        List<Sprint> activeSprints = sprintService.findByStatus(Sprint.Status.ACTIVE);
+        // Current sprint — scoped to project when project_id is provided
         Map<String, Object> currentSprint = new LinkedHashMap<>();
-        if (!activeSprints.isEmpty()) {
-            Sprint sprint = activeSprints.get(0);
+        Sprint sprint = null;
+        if (projectId != null) {
+            List<ProjectSprint> projectSprints = projectService.findSprints(projectId);
+            Optional<ProjectSprint> activeProjectSprint = projectSprints.stream()
+                    .filter(ps -> Boolean.TRUE.equals(ps.getActive()))
+                    .findFirst();
+            if (activeProjectSprint.isPresent()) {
+                sprint = activeProjectSprint.get().getSprint();
+            }
+        } else {
+            List<Sprint> activeSprints = sprintService.findByStatus(Sprint.Status.ACTIVE);
+            if (!activeSprints.isEmpty()) {
+                sprint = activeSprints.get(0);
+            }
+        }
+
+        if (sprint != null) {
             List<Task> sprintTasks = taskService.findBySprint(sprint.getSprintId());
+            if (projectId != null) {
+                sprintTasks = sprintTasks.stream()
+                        .filter(t -> t.getProject() != null && projectId.equals(t.getProject().getProjectId()))
+                        .collect(Collectors.toList());
+            }
             int total = sprintTasks.size();
             int completed = (int) sprintTasks.stream().filter(t -> t.getStatus() == Task.Status.DONE).count();
             long daysLeft = sprint.getEndDate() != null
@@ -89,6 +122,10 @@ public class DashboardController {
             currentSprint.put("on_track", velocity >= 50);
 
             greetingSummary.put("current_sprint_name", sprint.getName());
+        }
+
+        if (projectId != null) {
+            greetingSummary.put("project_id", projectId);
         }
 
         // My tasks next 5
@@ -111,6 +148,9 @@ public class DashboardController {
 
         // Build response
         Map<String, Object> response = new LinkedHashMap<>();
+        if (projectId != null) {
+            response.put("project_id", projectId);
+        }
         response.put("user", user);
         response.put("greeting_summary", greetingSummary);
         response.put("current_sprint", currentSprint);

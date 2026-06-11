@@ -53,7 +53,9 @@ public class TaskController {
         } else if (projectId != null && status != null) {
             tasks = taskService.findByProjectAndStatus(projectId, Task.Status.valueOf(status));
         } else if (projectId != null && sprintId != null) {
-            tasks = taskService.findBySprint(sprintId);
+            tasks = taskService.findBySprint(sprintId).stream()
+                    .filter(t -> t.getProject() != null && projectId.equals(t.getProject().getProjectId()))
+                    .collect(Collectors.toList());
         } else if (projectId != null) {
             tasks = taskService.findByProject(projectId);
         } else if (sprintId != null) {

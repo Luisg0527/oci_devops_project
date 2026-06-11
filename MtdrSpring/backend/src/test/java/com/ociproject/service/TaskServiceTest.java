@@ -27,6 +27,7 @@ class TaskServiceTest {
     @Mock TaskRepository taskRepository;
     @Mock TaskStatusHistoryRepository statusHistoryRepository;
     @Mock TaskSprintHistoryRepository sprintHistoryRepository;
+    @Mock ProjectService projectService;
 
     @InjectMocks
     TaskService service;
@@ -180,6 +181,58 @@ class TaskServiceTest {
         assertThrows(EntityNotFoundException.class,
                 () -> service.assignToSprint(99L, sprint, actor()));
         verify(sprintHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void countPendingTasksInOpenSprints_countsPendingTasksInOpenSprints() {
+        Sprint activeSprint = TestFixtures.sprint2();
+        activeSprint.setStatus(Sprint.Status.ACTIVE);
+        Sprint closedSprint = Sprint.builder().sprintId(99L).status(Sprint.Status.CLOSED).build();
+        ProjectSprint psActive = ProjectSprint.builder()
+                .sprint(activeSprint)
+                .sprintNumber(1)
+                .build();
+        ProjectSprint psClosed = ProjectSprint.builder()
+                .sprint(closedSprint)
+                .sprintNumber(2)
+                .build();
+        when(projectService.findSprints(1L)).thenReturn(List.of(psActive, psClosed));
+
+        Project project = Project.builder().projectId(1L).build();
+        Task pending = pendingTask();
+        pending.setProject(project);
+        pending.setSprint(activeSprint);
+        pending.setStatus(Task.Status.PENDING);
+        Task inProgress = pendingTask();
+        inProgress.setTaskId(2L);
+        inProgress.setProject(project);
+        inProgress.setSprint(activeSprint);
+        inProgress.setStatus(Task.Status.IN_PROGRESS);
+
+        when(taskRepository.findBySprintSprintIdAndDeletedFalse(2L))
+                .thenReturn(List.of(pending, inProgress));
+
+        assertThat(service.countPendingTasksInOpenSprints(1L)).isEqualTo(1);
+    }
+
+    @Test
+    void countPendingTasksInOpenSprints_includesProjectActiveSprintWhenMarkedActive() {
+        Sprint sprint = TestFixtures.sprint2();
+        sprint.setStatus(Sprint.Status.CLOSED);
+        ProjectSprint ps = ProjectSprint.builder()
+                .sprint(sprint)
+                .active(true)
+                .sprintNumber(1)
+                .build();
+        when(projectService.findSprints(1L)).thenReturn(List.of(ps));
+
+        Project project = Project.builder().projectId(1L).build();
+        Task pending = pendingTask();
+        pending.setProject(project);
+        pending.setSprint(sprint);
+        when(taskRepository.findBySprintSprintIdAndDeletedFalse(2L)).thenReturn(List.of(pending));
+
+        assertThat(service.countPendingTasksInOpenSprints(1L)).isEqualTo(1);
     }
 
     @Test
