@@ -1,5 +1,7 @@
 import React from 'react';
 import { NavLink, useHistory } from 'react-router-dom';
+import { APP_BRAND } from '../../utils/labelsEs';
+import { useProject } from '../../context/ProjectContext';
 import './Sidebar.css';
 
 const navItems = [
@@ -11,13 +13,14 @@ const navItems = [
 
 function Sidebar() {
   const history = useHistory();
-  const activeProject = localStorage.getItem('currentProjectName') || 'Sin proyecto';
+  const { projectName } = useProject();
+  const activeProject = projectName || 'Sin proyecto';
 
   return (
     <aside className="sidebar">
       <div className="sidebar__brand" onClick={() => history.push('/dashboard')}>
         <div>
-          <h1 className="sidebar__title">Project Studio</h1>
+          <h1 className="sidebar__title">{APP_BRAND}</h1>
           <span className="sidebar__subtitle">Proyecto activo: {activeProject}</span>
         </div>
       </div>

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { APP_BRAND } from '../utils/labelsEs';
+import { labelAuthError } from '../utils/labelsEs';
 import './Login.css';
 
 const API_BASE = '/api/v1';
@@ -16,10 +18,6 @@ function Login() {
     setCredentials((prev) => ({ ...prev, [field]: value }));
     if (error) setError('');
     if (message) setMessage('');
-  };
-
-  const handleForgotPassword = () => {
-    setMessage('Recuperación de contraseña pendiente de integración con el backend.');
   };
 
   const handleSubmit = async (event) => {
@@ -49,7 +47,7 @@ function Login() {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || 'No fue posible iniciar sesión.');
+        throw new Error(labelAuthError(payload.error) || 'No fue posible iniciar sesión.');
       }
 
       if (!payload.token) {
@@ -65,11 +63,15 @@ function Login() {
       else localStorage.removeItem('userTeamId');
 
       try {
-        const projectsResponse = await fetch(`${API_BASE}/projects?page=1&limit=100`, {
-          headers: {
-            Authorization: `Bearer ${payload.token}`,
-          },
-        });
+        const userId = payload.userId != null ? String(payload.userId) : localStorage.getItem('userId');
+        const projectsResponse = await fetch(
+          `${API_BASE}/projects?user_id=${encodeURIComponent(userId)}&page=1&limit=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${payload.token}`,
+            },
+          }
+        );
         const projectsPayload = await projectsResponse.json().catch(() => ({}));
         const projects = Array.isArray(projectsPayload.data) ? projectsPayload.data : [];
         if (projects.length > 0) {
@@ -88,7 +90,7 @@ function Login() {
       setMessage('Inicio de sesión correcto. Redirigiendo...');
       window.location.assign('/dashboard');
     } catch (err) {
-      setError(err.message || 'No fue posible iniciar sesión.');
+      setError(labelAuthError(err.message) || 'No fue posible iniciar sesión.');
     } finally {
       setIsSubmitting(false);
     }
@@ -97,7 +99,7 @@ function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1 className="login-card__brand">PROJECT STUDIO</h1>
+        <h1 className="login-card__brand">{APP_BRAND.toUpperCase()}</h1>
 
         <div className="login-card__content">
           <h2 className="login-card__title">Bienvenido al estudio</h2>
@@ -119,18 +121,9 @@ function Login() {
               autoComplete="username"
             />
 
-            <div className="login-form__row">
-              <label className="login-form__label" htmlFor="login-password">
-                Contraseña
-              </label>
-              <button
-                type="button"
-                className="login-form__link"
-                onClick={handleForgotPassword}
-              >
-                ¿Olvidaste tu contraseña?
-              </button>
-            </div>
+            <label className="login-form__label" htmlFor="login-password">
+              Contraseña
+            </label>
             <input
               id="login-password"
               type="password"
