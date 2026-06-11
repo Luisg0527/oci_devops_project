@@ -6,6 +6,7 @@ import com.ociproject.dto.request.UpdateSprintRequest;
 import com.ociproject.dto.response.SprintResponse;
 import com.ociproject.exception.ResourceNotFoundException;
 import com.ociproject.model.*;
+import com.ociproject.security.RoleAuthorization;
 import com.ociproject.service.*;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Tag(name = "Sprints", description = "Sprint CRUD and task summary")
 @RestController
@@ -65,6 +67,7 @@ public class SprintController {
                                 .ifPresent(ps -> {
                                     r.setProjectId(projectId);
                                     r.setSprintNumber(ps.getSprintNumber());
+                                    r.setIsActive(Boolean.TRUE.equals(ps.getActive()));
                                 });
                     }
                     enrichSprintWithTasks(sp, r);
@@ -97,6 +100,7 @@ public class SprintController {
     public ResponseEntity<?> create(@Valid @RequestBody CreateSprintRequest request,
                                     @AuthenticationPrincipal User actor,
                                     HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageSprints();
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new IllegalArgumentException("END_DATE must be greater than or equal to START_DATE.");
         }
@@ -128,6 +132,7 @@ public class SprintController {
                                                  @RequestBody UpdateSprintRequest request,
                                                  @AuthenticationPrincipal User actor,
                                                  HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageSprints();
         Sprint sprint = sprintService.findById(sprintId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sprint not found."));
 
@@ -138,10 +143,32 @@ public class SprintController {
             sprint.setStatus(Sprint.Status.valueOf(request.getStatus()));
         }
 
+        LocalDate startDate = sprint.getStartDate();
+        LocalDate endDate = sprint.getEndDate();
+        if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("END_DATE must be greater than or equal to START_DATE.");
+        }
+
         sprint = sprintService.save(sprint);
+
+        if (request.getProjectId() != null && request.getStatus() != null) {
+            boolean isActive = Sprint.Status.ACTIVE.name().equals(request.getStatus());
+            projectService.syncSprintActiveForProject(request.getProjectId(), sprintId, isActive);
+        }
+
         auditLogService.log(actor, "UPDATE", "SPRINTS", sprintId, httpRequest.getRemoteAddr());
 
         SprintResponse response = SprintResponse.from(sprint);
+        if (request.getProjectId() != null) {
+            projectService.findSprints(request.getProjectId()).stream()
+                    .filter(ps -> ps.getSprint().getSprintId().equals(sprintId))
+                    .findFirst()
+                    .ifPresent(ps -> {
+                        response.setProjectId(request.getProjectId());
+                        response.setSprintNumber(ps.getSprintNumber());
+                        response.setIsActive(Boolean.TRUE.equals(ps.getActive()));
+                    });
+        }
         enrichSprintWithTasks(sprint, response);
         return ResponseEntity.ok(response);
     }
@@ -150,6 +177,7 @@ public class SprintController {
     public ResponseEntity<?> delete(@PathVariable Long sprintId,
                                     @AuthenticationPrincipal User actor,
                                     HttpServletRequest httpRequest) {
+        RoleAuthorization.requireCanManageSprints();
         sprintService.softDelete(sprintId);
         auditLogService.log(actor, "DELETE", "SPRINTS", sprintId, httpRequest.getRemoteAddr());
         return ResponseEntity.ok(Map.of(

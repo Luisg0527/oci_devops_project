@@ -10,4 +10,6 @@ public class UpdateSprintRequest {
     private LocalDate startDate;
     private LocalDate endDate;
     private String status;
+    /** Proyecto al que pertenece el sprint; sincroniza el flag activo por proyecto. */
+    private Long projectId;
 }
